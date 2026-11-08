@@ -2,6 +2,7 @@ package io.github.mikachu1302.tvremote
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 // Messages here are built by hand with made-up values, in the shapes the TV sends.
@@ -105,5 +106,56 @@ class StateTest {
         assertEquals(TextEdit(1, ""), textEdit("a$face", "a"))
         assertEquals(TextEdit(1, "😁"), textEdit("a$face", "a😁")) // shares the high surrogate
         assertEquals(TextEdit(1, ""), textEdit(face, ""))
+    }
+}
+
+class AppCatalogTest {
+    @Test
+    fun catalogHasNoDuplicatesAndOnlyUsableLinks() {
+        assertEquals(CATALOG.size, CATALOG.map { it.name }.toSet().size)
+        assertEquals(CATALOG.size, CATALOG.map { it.link }.toSet().size)
+        val market = Regex("market://launch\\?id=[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+")
+        CATALOG.forEach { app ->
+            assertTrue("${app.name}: ${app.link}", app.link.startsWith("https://") || market.matches(app.link))
+        }
+    }
+
+    @Test
+    fun defaultsComeFromTheCatalog() {
+        assertTrue(DEFAULT_APPS.isNotEmpty())
+        assertTrue(CATALOG.containsAll(DEFAULT_APPS))
+    }
+
+    @Test
+    fun customInputIsALinkOrAPackageName() {
+        assertEquals("market://launch?id=com.example.app", customLink("  com.example.app "))
+        assertEquals("https://example.org/x", customLink("https://example.org/x"))
+        assertEquals("spotify://", customLink("spotify://"))
+    }
+
+    @Test
+    fun appListRoundTripsThroughJson() {
+        val apps = listOf(AppShortcut("A", "https://a.example"), AppShortcut("B \"q\"", "market://launch?id=b.c"))
+        assertEquals(apps, parseApps(appsToJson(apps)))
+        assertEquals(DEFAULT_APPS, parseApps(null))
+        assertEquals(DEFAULT_APPS, parseApps("not json"))
+    }
+}
+
+class AppNameTest {
+    @Test
+    fun knownTvPackagesGiveTheCatalogEntry() {
+        assertEquals(CATALOG.first { it.name == "YouTube" }, shortcutForPackage("com.google.android.youtube.tv"))
+        assertEquals(CATALOG.first { it.name == "Twitch" }, shortcutForPackage("tv.twitch.android.app"))
+    }
+
+    @Test
+    fun unknownPackagesGetAReadableNameAndAMarketLink() {
+        assertEquals("Twitch", guessAppName("tv.twitch.android.app"))
+        assertEquals("Youtube", guessAppName("com.google.android.youtube.tv"))
+        val s = shortcutForPackage("com.example.coolplayer.tv")
+        assertEquals("Coolplayer", s.name)
+        assertEquals("market://launch?id=com.example.coolplayer.tv", s.link)
+        assertEquals("From TV", shortcutForPackage("com.example.coolplayer.tv", "From TV").name)
     }
 }

@@ -96,7 +96,8 @@ All in `app/src/main/java/io/github/mikachu1302/tvremote/`:
   pure `TvState.apply` and `textEdit`; no UI types (`Voice.kt` needs `AudioRecord`)
 - `Tls.kt` – keystore identity, pinned TLS socket (the only Android-specific protocol file)
 - `Discovery.kt` – mDNS search for TVs (`NsdManager`)
-- `Prefs.kt` – settings and app-shortcut storage (SharedPreferences, org.json)
+- `Prefs.kt` – settings, app-shortcut storage (SharedPreferences, org.json) and the `CATALOG` of apps
+  the picker offers
 - `RemoteViewModel.kt` – paired TV, connection loop, TV state, voice, settings, pairing
 - `MainActivity.kt` – activity (keep-awake, theater mode), screen router, find/pair screens
 - `RemoteScreen.kt` – the remote (app row, D-pad / number pad, buttons, keyboard bar, drawn icons)
@@ -115,6 +116,10 @@ notes above plus these files are its spec.
   press, `END_LONG` on release – never leave a key held: the release runs in a `finally`);
   with "smooth press" off it repeats a short press (~150 ms after ~400 ms). Other buttons
   fire once.
+- **App catalog:** every package name in `CATALOG` was checked against Google Play
+  (`play.google.com/store/apps/details?id=<package>` must answer 200 with the right title)
+  before adding it; don't add one from memory. The picker also offers the app that is open
+  on the TV (any package works through `market://launch?id=`), so a missing app is never a dead end.
 - Icons are drawn with `Canvas`: fonts on phones lack many symbols (⏻ showed as a box).
   No app logos in the repo; tiles use a colour from the name.
 - Connection problems show a plain message and a retry – never a crash or a silent

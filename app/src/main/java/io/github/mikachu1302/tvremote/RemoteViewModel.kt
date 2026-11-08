@@ -240,6 +240,12 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
 
     fun resetApps() = saveApps(DEFAULT_APPS)
 
+    /** Picker tap: adds the app, or removes it when it is already in the row. */
+    fun toggleApp(app: AppShortcut) {
+        val i = _apps.value.indexOfFirst { it.link == app.link }
+        if (i >= 0) removeApp(i) else addApp(app)
+    }
+
     fun removeApp(index: Int) = saveApps(_apps.value.filterIndexed { i, _ -> i != index })
 
     fun moveApp(index: Int, by: Int) {
@@ -248,17 +254,6 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         if (index !in list.indices || target !in list.indices) return
         list.add(target, list.removeAt(index))
         saveApps(list)
-    }
-
-    /** Adds whatever app is open on the TV right now as a shortcut (launched by package name). */
-    fun addCurrentApp(): Boolean {
-        val state = _tvState.value
-        val pkg = state.appPackage ?: return false
-        val name = state.appLabel ?: pkg.substringAfterLast('.').replaceFirstChar { it.uppercase() }
-        val link = "market://launch?id=$pkg"
-        if (_apps.value.any { it.link == link }) return true
-        addApp(AppShortcut(name, link))
-        return true
     }
 
     // ------------------------------------------------------------ pairing

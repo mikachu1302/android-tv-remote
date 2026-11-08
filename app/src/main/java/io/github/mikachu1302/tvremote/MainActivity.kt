@@ -121,7 +121,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { Remote, Settings, Apps }
+private enum class Screen { Remote, Settings, Apps, Picker }
 
 @Composable
 private fun App(vm: RemoteViewModel) {
@@ -131,7 +131,11 @@ private fun App(vm: RemoteViewModel) {
     var screen by remember { mutableStateOf(Screen.Remote) }
     LaunchedEffect(paired == null) { screen = Screen.Remote }
     BackHandler(enabled = paired != null && screen != Screen.Remote) {
-        screen = if (screen == Screen.Apps) Screen.Settings else Screen.Remote
+        screen = when (screen) {
+            Screen.Picker -> Screen.Apps
+            Screen.Apps -> Screen.Settings
+            else -> Screen.Remote
+        }
     }
     CompositionLocalProvider(LocalSettings provides settings) {
         val tv = paired
@@ -140,7 +144,8 @@ private fun App(vm: RemoteViewModel) {
             tv == null -> FindTvScreen(vm)
             screen == Screen.Remote -> RemoteScreen(tv, vm, onSettings = { screen = Screen.Settings })
             screen == Screen.Settings -> SettingsScreen(tv, vm, onBack = { screen = Screen.Remote }, onApps = { screen = Screen.Apps })
-            else -> ManageAppsScreen(vm, onBack = { screen = Screen.Settings })
+            screen == Screen.Apps -> ManageAppsScreen(vm, onBack = { screen = Screen.Settings }, onAdd = { screen = Screen.Picker })
+            else -> AppPickerScreen(vm, onBack = { screen = Screen.Apps })
         }
     }
 }

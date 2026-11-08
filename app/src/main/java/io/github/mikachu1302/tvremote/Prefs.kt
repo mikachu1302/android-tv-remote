@@ -17,12 +17,77 @@ data class RemoteSettings(
 /** A tile in the app row: opens [link] on the TV (a deep link or `market://launch?id=<package>`). */
 data class AppShortcut(val name: String, val link: String)
 
-val DEFAULT_APPS = listOf(
+/** Opens any installed app by its Android package name (or its Play Store page if it is missing). */
+fun marketLink(pkg: String) = "market://launch?id=$pkg"
+
+/**
+ * What a user may type for a custom shortcut: a web/deep link as is, or an
+ * Android package name (`com.example.app`), which becomes a market link.
+ */
+fun customLink(input: String): String {
+    val text = input.trim()
+    return if ("://" in text) text else marketLink(text)
+}
+
+/**
+ * Apps to pick from. Package names were checked against Google Play. The
+ * first four use web links the Android TV apps register; the rest launch by
+ * package name. A package that is not installed opens its store page.
+ */
+val CATALOG = listOf(
     AppShortcut("YouTube", "https://www.youtube.com"),
     AppShortcut("Netflix", "https://www.netflix.com"),
     AppShortcut("Prime Video", "https://app.primevideo.com"),
     AppShortcut("Disney+", "https://www.disneyplus.com"),
+    AppShortcut("waipu.tv", marketLink("de.exaring.waipu")),
+    AppShortcut("Apple TV", marketLink("com.apple.atve.androidtv.appletv")),
+    AppShortcut("Paramount+", marketLink("com.cbs.ott")),
+    AppShortcut("HBO Max", marketLink("com.wbd.stream")),
+    AppShortcut("Twitch", marketLink("tv.twitch.android.app")),
+    AppShortcut("Crunchyroll", marketLink("com.crunchyroll.crunchyroid")),
+    AppShortcut("DAZN", marketLink("com.dazn")),
+    AppShortcut("Joyn", marketLink("de.prosiebensat1digital.seventv")),
+    AppShortcut("RTL+", marketLink("de.rtli.tvnow")),
+    AppShortcut("WOW", marketLink("de.sky.online")),
+    AppShortcut("ARD Mediathek", marketLink("de.swr.avp.ard.tv")),
+    AppShortcut("ZDF", marketLink("com.zdf.android.mediathek")),
+    AppShortcut("ARTE", marketLink("tv.arte.plus7")),
+    AppShortcut("Spotify", marketLink("com.spotify.tv.android")),
+    AppShortcut("YouTube Music", marketLink("com.google.android.youtube.tvmusic")),
+    AppShortcut("Amazon Music", marketLink("com.amazon.music.tv")),
+    AppShortcut("Pluto TV", marketLink("tv.pluto.android")),
+    AppShortcut("Tubi", marketLink("com.tubitv")),
+    AppShortcut("Plex", marketLink("com.plexapp.android")),
+    AppShortcut("Kodi", marketLink("org.xbmc.kodi")),
+    AppShortcut("VLC", marketLink("org.videolan.vlc")),
 )
+
+val DEFAULT_APPS = CATALOG.take(5)
+
+/** The Android TV packages behind the catalog entries that launch by web link. */
+private val LINK_APP_PACKAGES = mapOf(
+    "com.google.android.youtube.tv" to "YouTube",
+    "com.netflix.ninja" to "Netflix",
+    "com.amazon.amazonvideo.livingroom" to "Prime Video",
+    "com.disney.disneyplus" to "Disney+",
+)
+
+private val GENERIC_PACKAGE_PARTS = setOf(
+    "com", "org", "net", "io", "de", "tv", "app", "android", "androidtv", "google", "ott", "mobile", "tvapp",
+)
+
+/** A readable name from a package like `tv.twitch.android.app` -> "Twitch". */
+fun guessAppName(pkg: String): String {
+    val parts = pkg.split('.')
+    val name = parts.lastOrNull { it !in GENERIC_PACKAGE_PARTS } ?: parts.last()
+    return name.replaceFirstChar { it.uppercase() }
+}
+
+/** The shortcut for an app the TV reports as open: the catalog's entry when we know it. */
+fun shortcutForPackage(pkg: String, label: String? = null): AppShortcut =
+    LINK_APP_PACKAGES[pkg]?.let { name -> CATALOG.first { it.name == name } }
+        ?: CATALOG.firstOrNull { it.link == marketLink(pkg) }
+        ?: AppShortcut(label ?: guessAppName(pkg), marketLink(pkg))
 
 fun SharedPreferences.loadSettings() = RemoteSettings(
     haptics = getBoolean("haptics", true),

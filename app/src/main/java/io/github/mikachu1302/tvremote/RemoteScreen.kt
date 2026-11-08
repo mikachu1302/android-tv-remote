@@ -144,7 +144,7 @@ fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit) {
                         fontSize = 13.sp,
                         color = if (problem) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    (state.appLabel ?: state.appPackage?.let(::prettyPackage))?.let {
+                    state.appPackage?.let { shortcutForPackage(it, state.appLabel).name }?.let {
                         Text(
                             "Now: $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -223,10 +223,6 @@ fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit) {
         }
     }
 }
-
-/** "com.google.android.youtube.tv" -> "youtube.tv": the TV rarely sends a readable app name. */
-fun prettyPackage(pkg: String): String =
-    pkg.removePrefix("com.google.android.").removePrefix("com.android.").removePrefix("com.").removePrefix("org.")
 
 // ------------------------------------------------------------------ app row
 

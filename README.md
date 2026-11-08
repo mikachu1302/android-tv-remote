@@ -10,7 +10,8 @@ uses – over your local network.
 - Keyboard: type on the phone, it appears in the TV's text field (opens by itself when a
   text field gets focus)
 - Voice search: hold the mic button
-- App shortcuts row (add the app that is open on the TV with one tap, or any deep link)
+- App shortcuts row: pick apps from a list (streaming, German TV libraries, music, Kodi, VLC …),
+  add the app that is open on the TV with one tap, or enter a package name
 - Holding a button acts like holding it on a physical remote
 - Reconnects by itself (also after the screen locked or the TV's address changed)
 - Settings: haptics, smooth press, keep screen awake, theater mode
