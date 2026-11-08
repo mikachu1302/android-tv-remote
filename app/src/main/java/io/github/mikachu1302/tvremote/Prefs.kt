@@ -31,6 +31,8 @@ data class RemoteSettings(
     /** Scanlines over the CRT style. */
     val scanlines: Boolean = true,
     val icon: IconChoice = IconChoice.Match,
+    /** The volume keys control the TV itself (UPnP), when one is chosen and answers; else the stick. */
+    val tvVolume: Boolean = true,
 )
 
 /** A tile in the app row: opens [link] on the TV (a deep link or `market://launch?id=<package>`). */
@@ -120,6 +122,7 @@ fun SharedPreferences.loadSettings() = RemoteSettings(
     icon = getString("icon", null).let { saved ->
         IconChoice.entries.firstOrNull { it.name == saved } ?: if (saved == "Pride") IconChoice.PrideBezel else IconChoice.Match
     },
+    tvVolume = getBoolean("tvVolume", true),
 )
 
 fun SharedPreferences.Editor.putSettings(s: RemoteSettings): SharedPreferences.Editor = this
@@ -131,6 +134,7 @@ fun SharedPreferences.Editor.putSettings(s: RemoteSettings): SharedPreferences.E
     .putString("palette", s.palette)
     .putBoolean("scanlines", s.scanlines)
     .putString("icon", s.icon.name)
+    .putBoolean("tvVolume", s.tvVolume)
 
 fun parseApps(json: String?): List<AppShortcut> {
     if (json == null) return DEFAULT_APPS
@@ -159,3 +163,15 @@ fun parseTvs(json: String?): List<PairedTv> {
 
 fun tvsToJson(tvs: List<PairedTv>): String =
     JSONArray(tvs.map { JSONObject().put("name", it.name).put("host", it.host).put("pin", it.pin) }).toString()
+
+fun parseAudioTv(json: String?): AudioTv? {
+    if (json == null) return null
+    return runCatching {
+        val o = JSONObject(json)
+        AudioTv(o.getString("name"), o.getString("host"), o.getInt("port"), o.getString("control"), o.optString("mac").ifEmpty { null })
+    }.getOrNull()
+}
+
+fun audioTvToJson(tv: AudioTv): String =
+    JSONObject().put("name", tv.name).put("host", tv.host).put("port", tv.port).put("control", tv.control)
+        .apply { tv.mac?.let { put("mac", it) } }.toString()

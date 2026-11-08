@@ -2,6 +2,7 @@ package io.github.mikachu1302.tvremote
 
 import android.app.Application
 import android.content.pm.ApplicationInfo
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -65,6 +66,16 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private val _apps = MutableStateFlow(parseApps(prefs.getString("apps", null)))
     val apps: StateFlow<List<AppShortcut>> = _apps
 
+    /** The TV whose own volume the volume keys control (UPnP), and what it last reported (null: not reachable). */
+    private val _audioTv = MutableStateFlow(parseAudioTv(prefs.getString("audioTv", null)))
+    val audioTv: StateFlow<AudioTv?> = _audioTv
+    private val _audio = MutableStateFlow<TvAudio?>(null)
+    val audio: StateFlow<TvAudio?> = _audio
+    private var audioLoop: Job? = null
+    private var ramp: Job? = null
+    @Volatile private var lastAudioSet = 0L
+    private val audioSender = Dispatchers.IO.limitedParallelism(1)
+
     private val _voice = MutableStateFlow(VoiceUi.Idle)
     val voice: StateFlow<VoiceUi> = _voice
     @Volatile private var voiceHeld = false
@@ -105,12 +116,16 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The app is visible: keep a connection to the paired TV, reconnecting when it drops. */
     fun onForeground() {
+        startAudio()
         if (loop?.isActive == true || _paired.value == null) return
         loop = viewModelScope.launch(Dispatchers.IO) { connectionLoop() }
     }
 
     /** The app left the screen: close the connection (the TV frees the session; no battery use). */
-    fun onBackground() = stopConnection()
+    fun onBackground() {
+        stopConnection()
+        stopAudio()
+    }
 
     private suspend fun connectionLoop() {
         var wait = 500L
@@ -185,7 +200,128 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun press(keyCode: Int, direction: Direction = Direction.Short) = withConnection { it.send(keyCode, direction) }
+    fun press(keyCode: Int, direction: Direction = Direction.Short) {
+        if (audioKey(keyCode, direction)) return
+        withConnection { it.send(keyCode, direction) }
+    }
+
+    // ------------------------------------------------------------ the TV's own volume and power
+
+    /** Polls the TV's volume while the app is visible; null while it does not answer (off, or another network). */
+    private fun startAudio() {
+        if (audioLoop?.isActive == true) return
+        audioLoop = viewModelScope.launch(Dispatchers.IO) {
+            while (true) {
+                val tv = _audioTv.value
+                if (tv == null || !_settings.value.tvVolume) {
+                    _audio.value = null
+                    delay(1_000)
+                    continue
+                }
+                var wait = 2_500L
+                try {
+                    val now = AudioClient(tv).read()
+                    // A reading taken just before our own change would flicker the display back.
+                    if (SystemClock.elapsedRealtime() - lastAudioSet > 1_500) _audio.value = now
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _audio.value = null
+                    wait = 1_500
+                }
+                delay(wait)
+            }
+        }
+    }
+
+    private fun stopAudio() {
+        ramp?.cancel()
+        audioLoop?.cancel()
+        audioLoop = null
+        _audio.value = null
+    }
+
+    /**
+     * Volume and mute go to the TV when it answers; else they stay keys for the stick (HDMI-CEC).
+     * Returns true when the key was handled here.
+     */
+    private fun audioKey(code: Int, direction: Direction): Boolean {
+        if (_audioTv.value == null || !_settings.value.tvVolume || _audio.value == null) return false
+        when (code) {
+            Key.VOLUME_UP, Key.VOLUME_DOWN -> {
+                val step = if (code == Key.VOLUME_UP) 1 else -1
+                when (direction) {
+                    Direction.Short -> nudgeVolume(step)
+                    Direction.StartLong -> {
+                        ramp?.cancel()
+                        ramp = viewModelScope.launch {
+                            nudgeVolume(step)
+                            delay(400)
+                            while (true) {
+                                nudgeVolume(step)
+                                delay(120)
+                            }
+                        }
+                    }
+                    Direction.EndLong -> ramp?.cancel()
+                }
+            }
+            Key.VOLUME_MUTE -> if (direction != Direction.EndLong) toggleTvMute()
+            else -> return false
+        }
+        return true
+    }
+
+    private fun nudgeVolume(step: Int) {
+        val tv = _audioTv.value ?: return
+        viewModelScope.launch(audioSender) {
+            val current = _audio.value ?: return@launch
+            val next = (current.level + step).coerceIn(0, 100)
+            if (next == current.level) return@launch
+            lastAudioSet = SystemClock.elapsedRealtime()
+            _audio.value = current.copy(level = next)
+            try {
+                AudioClient(tv).setVolume(next)
+            } catch (e: IOException) {
+                _audio.value = null
+            }
+        }
+    }
+
+    private fun toggleTvMute() {
+        val tv = _audioTv.value ?: return
+        viewModelScope.launch(audioSender) {
+            val current = _audio.value ?: return@launch
+            lastAudioSet = SystemClock.elapsedRealtime()
+            _audio.value = current.copy(muted = !current.muted)
+            try {
+                AudioClient(tv).setMute(!current.muted)
+            } catch (e: IOException) {
+                _audio.value = null
+            }
+        }
+    }
+
+    /** Chooses the TV for volume (and the address to wake); null forgets it. */
+    fun setAudioTv(tv: AudioTv?) {
+        _audioTv.value = tv
+        _audio.value = null
+        prefs.edit().apply { if (tv == null) remove("audioTv") else putString("audioTv", audioTvToJson(tv)) }.apply()
+    }
+
+    /** Sets the TV's MAC address for Wake-on-LAN; an empty text clears it. */
+    fun setWakeAddress(text: String) {
+        val tv = _audioTv.value ?: return
+        setAudioTv(tv.copy(mac = text.trim().ifEmpty { null }))
+    }
+
+    /** Switches the TV on from standby with a Wake-on-LAN packet. False when there is no address to wake. */
+    fun wakeTv(): Boolean {
+        val tv = _audioTv.value
+        val mac = tv?.mac?.let(Wol::parseMac) ?: return false
+        viewModelScope.launch(Dispatchers.IO) { Wol.send(mac, tv.host) }
+        return true
+    }
 
     /** The user edited the keyboard field from [old] to [new]; mirror that on the TV. */
     fun typed(old: String, new: String) {

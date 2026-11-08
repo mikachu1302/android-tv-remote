@@ -91,6 +91,16 @@ The same protocol Google's own remote uses. Reference: `tronikos/androidtvremote
   level and nothing arrives when volume keys are pressed (volume lives on the TV over
   HDMI-CEC). So the app shows a level or mute state only when a device reports a maximum.
   Remote ATV shows "VOL 0" for the same reason.
+- **The TV itself (Hisense VIDAA, found by probing the real one):** the stick's volume keys only reach the TV over
+  HDMI-CEC, which is unreliable and reports nothing back. VIDAA TVs run a UPnP/DLNA media renderer (port 38400,
+  SSDP, description at `/MediaServer/rendererdevicedesc.xml`): its standard `RenderingControl` service answers
+  `GetVolume`/`GetMute` and accepts `SetVolume`/`SetMute` (0-100) over plain HTTP + SOAP, no pairing (`TvAudio.kt`:
+  `AudioClient`, `Upnp`; SSDP can miss the TV, so `discoverAudioTvs` also probes the phone's /24 for the port).
+  Power on = Wake-on-LAN magic packet to the MAC the user types in (`Wol`); the TV must have it enabled. VIDAA's
+  own remote protocol (MQTT over TLS on port 36669) needs a client certificate issued by Hisense's "RemoteCA":
+  without it the TLS handshake fails, so keys, power-off and input switching are NOT available that way, and
+  Hisense's key must not be copied into this repo. Bluetooth HID (phone as keyboard/remote) is the untried route
+  for power-off and input.
 - **Connection life:** the app connects when it is visible and closes the connection in the
   background; the loop retries with backoff (0.5 s … 8 s), re-finds the TV by its mDNS
   name when its address changed, and stops with a message if the pinned certificate no
@@ -108,7 +118,8 @@ All in `app/src/main/java/io/github/mikachu1302/tvremote/`:
 - `Pairing.kt`, `Remote.kt`, `Voice.kt` – the protocol sessions and state; `Remote.kt` has the
   pure `TvState.apply` and `textEdit`; no UI types (`Voice.kt` needs `AudioRecord`)
 - `Tls.kt` – keystore identity, pinned TLS socket (the only Android-specific protocol file)
-- `Discovery.kt` – mDNS search for TVs (`NsdManager`)
+- `Discovery.kt` – mDNS search for TVs (`NsdManager`), SSDP + subnet search for UPnP renderers
+- `TvAudio.kt` – the TV's own volume (UPnP RenderingControl, plain-socket HTTP) and Wake-on-LAN
 - `Prefs.kt` – settings, app-shortcut storage (SharedPreferences, org.json) and the `CATALOG` of apps
   the picker offers
 - `Theme.kt` – the two styles (Neon CRT, Glass), the palettes, fonts, glow/pane helpers, themed buttons
@@ -154,8 +165,10 @@ notes above plus these files are its spec.
   text. Buttons are large and reachable with a thumb; every button has a content
   description for TalkBack. Pressing a button gives haptic feedback.
 - **The remote fits the screen without scrolling:** the pad pager takes the height the rest leaves (pads scale to it);
-  only a window under 640 dp falls back to scrolling. Buttons on the pager's pages (`LocalSwipeable`) wait ~100 ms before
-  sending, so a swipe that starts on a key sends nothing; a quick tap goes out as one short press.
+  only a window under 640 dp falls back to scrolling. Buttons on the pager's pages and in the bottom row (`LocalSwipeable`) wait ~100 ms before
+  sending, so a swipe that starts on a key (to the next page, or the system home gesture from the bottom edge, which
+  the app only learns about after the touch-down) sends nothing; a quick tap goes out as one short press. The bottom
+  row also keeps 24 dp free below it: the home-gesture area reaches higher than the system bar's inset.
 - Holding volume, channel or a D-pad direction holds the key on the TV (`START_LONG` on
   press, `END_LONG` on release – never leave a key held: the release runs in a `finally`);
   with "smooth press" off it repeats a short press (~150 ms after ~400 ms). Other buttons

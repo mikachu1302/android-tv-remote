@@ -2,6 +2,7 @@ package io.github.mikachu1302.tvremote
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -124,7 +125,9 @@ fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit, onAd
     val currentApp = state.appPackage?.let { shortcutForPackage(it, state.appLabel) }
     val on = state.on == true
     val powerLabel = "Power, " + when (state.on) { true -> "on"; false -> "off"; null -> "state unknown" }
-    val volume = state.volume
+    val tvAudio by vm.audio.collectAsStateWithLifecycle()
+    // The TV's own volume when it answers (UPnP), else whatever the stick reports (nothing, on this one).
+    val volume = tvAudio?.let { Volume(it.level, 100, it.muted) } ?: state.volume
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // The screen fits without scrolling: the pad pages take the space the rest leaves. Only a
@@ -134,7 +137,8 @@ fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit, onAd
         Column(
             Modifier.fillMaxSize()
                 .then(if (tight) Modifier.verticalScroll(scroll) else Modifier)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                // Extra room below: the home-gesture area reaches higher than the system bar's own inset.
+                .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -164,50 +168,53 @@ fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit, onAd
             }
             PagerDots(pager)
 
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Rocker(
-                    title = when {
-                        volume == null -> "VOL"
-                        volume.muted -> "MUTED"
-                        else -> "VOL ${volume.level}"
-                    },
-                    upLabel = "Volume up", upKey = Key.VOLUME_UP,
-                    downLabel = "Volume down", downKey = Key.VOLUME_DOWN,
-                    vm = vm,
-                )
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (term.crt) 6.dp else 8.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ClusterKey("KBD", "Keyboard", "kbd", vm, null, active = keyboard != null,
-                            onClick = { if (keyboard == null) openKeyboard("") else keyboard = null })
-                        ClusterKey("HOME", "Home", "home", vm, Key.HOME)
-                        ClusterKey("MENU", "Menu", "menu", vm, Key.MENU)
+            // A touch that starts a home swipe from the bottom edge must not press a key.
+            CompositionLocalProvider(LocalSwipeable provides true) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Rocker(
+                        title = when {
+                            volume == null -> "VOL"
+                            volume.muted -> "MUTED"
+                            else -> "VOL ${volume.level}"
+                        },
+                        upLabel = "Volume up", upKey = Key.VOLUME_UP,
+                        downLabel = "Volume down", downKey = Key.VOLUME_DOWN,
+                        vm = vm,
+                    )
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (term.crt) 6.dp else 8.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ClusterKey("KBD", "Keyboard", "kbd", vm, null, active = keyboard != null,
+                                onClick = { if (keyboard == null) openKeyboard("") else keyboard = null })
+                            ClusterKey("HOME", "Home", "home", vm, Key.HOME)
+                            ClusterKey("MENU", "Menu", "menu", vm, Key.MENU)
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ClusterKey(
+                                "MUTE", "Mute, " + if (volume?.muted == true) "on" else "off",
+                                if (volume?.muted == true) "speaker-off" else "speaker", vm, Key.VOLUME_MUTE,
+                                active = volume?.muted == true, activeColor = term.palette.action,
+                            )
+                            ClusterKey(
+                                "MIC", "Voice search, hold to talk", "mic", vm, null,
+                                active = voice == VoiceUi.Listening, activeColor = term.palette.action,
+                                onDown = ::micDown, onUp = vm::stopVoice,
+                            )
+                            ClusterKey("BACK", "Back", "back", vm, Key.BACK)
+                        }
+                        RemoteButton(
+                            "Play or pause", Key.PLAY_PAUSE, vm, Modifier.fillMaxWidth().height(56.dp),
+                            look = Look.Primary, shape = if (term.crt) null else RoundedCornerShape(28.dp),
+                        ) { color ->
+                            if (term.crt) Text("PLAY / PAUSE", color = color, fontSize = 17.sp, style = glowStyle(color))
+                            else Glyph("play", color, Modifier.size(26.dp))
+                        }
                     }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ClusterKey(
-                            "MUTE", "Mute, " + if (volume?.muted == true) "on" else "off",
-                            if (volume?.muted == true) "speaker-off" else "speaker", vm, Key.VOLUME_MUTE,
-                            active = volume?.muted == true, activeColor = term.palette.action,
-                        )
-                        ClusterKey(
-                            "MIC", "Voice search, hold to talk", "mic", vm, null,
-                            active = voice == VoiceUi.Listening, activeColor = term.palette.action,
-                            onDown = ::micDown, onUp = vm::stopVoice,
-                        )
-                        ClusterKey("BACK", "Back", "back", vm, Key.BACK)
-                    }
-                    RemoteButton(
-                        "Play or pause", Key.PLAY_PAUSE, vm, Modifier.fillMaxWidth().height(56.dp),
-                        look = Look.Primary, shape = if (term.crt) null else RoundedCornerShape(28.dp),
-                    ) { color ->
-                        if (term.crt) Text("PLAY / PAUSE", color = color, fontSize = 17.sp, style = glowStyle(color))
-                        else Glyph("play", color, Modifier.size(26.dp))
-                    }
+                    Rocker("CH", "Channel up", Key.CHANNEL_UP, "Channel down", Key.CHANNEL_DOWN, vm)
                 }
-                Rocker("CH", "Channel up", Key.CHANNEL_UP, "Channel down", Key.CHANNEL_DOWN, vm)
             }
         }
         keyboard?.let { id ->
@@ -557,11 +564,16 @@ private fun PagerDots(state: PagerState) {
     }
 }
 
-/** Playback, TV and colour keys, and the stick's sleep/wake: five rows of four (see [MORE_KEYS]). */
+/**
+ * Playback, TV and colour keys, and the stick's sleep/wake: five rows of four (see [MORE_KEYS]);
+ * with a TV chosen in Settings, a sixth row switches that TV on (Wake-on-LAN).
+ */
 @Composable
 private fun MoreKeysPage(vm: RemoteViewModel) {
     val gap = if (LocalTerm.current.crt) 6.dp else 8.dp
-    Column(Modifier.fillMaxWidth().heightIn(max = 290.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
+    val tv by vm.audioTv.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    Column(Modifier.fillMaxWidth().heightIn(max = 340.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
         MORE_KEYS.forEach { row ->
             Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(gap)) {
                 row.forEach { key ->
@@ -574,6 +586,15 @@ private fun MoreKeysPage(vm: RemoteViewModel) {
                     }
                 }
             }
+        }
+        if (tv != null) {
+            RemoteButton(
+                "Switch the TV on", null, vm, Modifier.fillMaxWidth().weight(1f), look = Look.Primary,
+                onClick = {
+                    val message = if (vm.wakeTv()) "Wake signal sent to the TV" else "Enter the TV's MAC address in Settings > TV volume and power first"
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                },
+            ) { color -> Text(if (LocalTerm.current.crt) "TV ON" else "TV on", color = color, fontSize = 15.sp, maxLines = 1) }
         }
     }
 }

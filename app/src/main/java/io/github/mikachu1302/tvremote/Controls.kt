@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
 
 val LocalSettings = staticCompositionLocalOf { RemoteSettings() }
 
-/** True for buttons that sit on a page the user swipes sideways (see [RemoteButton]). */
+/** True for buttons a swipe can start on: the swipeable pages, and the bottom row next to the home-gesture area (see [RemoteButton]). */
 val LocalSwipeable = staticCompositionLocalOf { false }
 
 /** How long a touch on a swipeable page waits to see whether it becomes a swipe. */
@@ -126,8 +126,8 @@ fun RemoteButton(
                 awaitEachGesture {
                     awaitFirstDown()
                     pressed = true
-                    // On a swipeable page the touch may be a swipe to the next page: wait briefly. If the
-                    // pager takes the touch over, nothing is sent; a quick tap is sent as one short press.
+                    // The touch may be a swipe (next page, or the system home gesture): wait briefly. If the
+                    // pager or the system takes the touch over, nothing is sent; a quick tap is sent as one short press.
                     var released: PointerInputChange? = null
                     if (swipeable) {
                         val early = withTimeoutOrNull(SWIPE_WINDOW_MS) { Released(waitForUpOrCancellation()) }
