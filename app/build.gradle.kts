@@ -11,11 +11,16 @@ android {
         applicationId = "io.github.mikachu1302.tvremote"
         minSdk = 31
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildTypes {
+        debug {
+            // Its own app ID: the debug build installs next to the release build instead of
+            // replacing it (the two are signed with different keys).
+            applicationIdSuffix = ".debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

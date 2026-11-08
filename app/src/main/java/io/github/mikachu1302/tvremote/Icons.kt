@@ -34,6 +34,7 @@ private val STROKED = mapOf(
     "down" to "M6 9l6 6 6-6",
     "left" to "M15 6l-6 6 6 6",
     "right" to "M9 6l6 6-6 6",
+    "arrow-left" to "M19 12H5M11 6l-6 6 6 6",
     "check" to "M5 12.5l5 5L19.5 7",
     "info" to "M21 12a9 9 0 1 1-18 0a9 9 0 1 1 18 0M12 11v5M12 8h.01",
     "dpad" to "M12 2.5l3 4h-6zM12 21.5l3-4h-6zM2.5 12l4-3v6zM21.5 12l-4-3v6zM12 10.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3",

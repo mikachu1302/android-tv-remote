@@ -37,9 +37,21 @@ description.
 ./gradlew test                 # JVM unit tests (protobuf codec, pairing hash)
 ./gradlew lint                 # Android lint – fix findings, don't silence them
 python3 tools/gen_launcher_icons.py   # regenerate launcher icons + manifest aliases after a palette change
+./tools/release.sh             # signed release APK: build/release/tv-remote-<version>.apk
 ~/Android/Sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
-~/Android/Sdk/platform-tools/adb logcat --pid=$(adb shell pidof io.github.mikachu1302.tvremote)
+~/Android/Sdk/platform-tools/adb logcat --pid=$(adb shell pidof io.github.mikachu1302.tvremote.debug)
 ```
+
+The debug build has its own app ID (`io.github.mikachu1302.tvremote.debug`, label "TV Remote
+(debug)") and installs next to the release build, which keeps `io.github.mikachu1302.tvremote`.
+Launch the debug one with `adb shell am start -n io.github.mikachu1302.tvremote.debug/io.github.mikachu1302.tvremote.MainActivity`.
+Each build has its own pairing and settings.
+
+**Releasing:** bump `versionName`/`versionCode` in `app/build.gradle.kts`, run `./tools/release.sh`, install
+with `adb install -r` (updates keep the pairing and settings). The signing key is created on the first run
+in `~/.config/tv-remote/` (outside the repo, never commit it, back it up: with a different key an installed
+release can only be replaced after uninstalling it, which loses the pairing). Tag and publish a GitHub
+release only when the user asks.
 
 `adb` is not on `PATH`. The phone is reached through wireless debugging
 (`adb devices` shows it; if it is missing, ask the user to re-enable wireless debugging).

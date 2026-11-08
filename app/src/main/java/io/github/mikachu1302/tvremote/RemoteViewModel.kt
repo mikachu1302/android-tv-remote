@@ -36,6 +36,7 @@ sealed interface PairingUi {
 class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("tv", 0)
     private val debug = app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+    private val appVersion = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull() ?: "0"
 
     /** Every paired TV; one of them is the active one the remote controls. */
     private val _tvs = MutableStateFlow(loadTvs())
@@ -120,7 +121,7 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
             val closed = CompletableDeferred<Unit>()
             try {
                 connection = RemoteConnection(
-                    tv.host, tv.pin,
+                    tv.host, tv.pin, appVersion,
                     onState = { _tvState.value = it },
                     onClosed = { closed.complete(Unit) },
                     trace = if (debug) { m -> Log.d("TvRemote", m) } else null,

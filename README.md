@@ -25,8 +25,9 @@ keystore.
 ## Build
 
 ```
-./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleDebug        # debug build, installs as "TV Remote (debug)"
+./tools/release.sh             # signed release APK in build/release/ (creates a signing key on first run)
+adb install -r build/release/tv-remote-0.2.0.apk
 ```
 
 Requires the Android SDK (platform 37) and a JDK. See `AGENTS.md` for details.

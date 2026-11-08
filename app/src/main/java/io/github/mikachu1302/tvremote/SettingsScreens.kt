@@ -59,8 +59,8 @@ fun SettingsScreen(tv: PairedTv, vm: RemoteViewModel, onBack: () -> Unit, onApps
     val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "" }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TTextButton(onClick = onBack) { Text("← Back") }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            BackButton(onBack)
             Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }
 
@@ -204,8 +204,8 @@ fun ManageAppsScreen(vm: RemoteViewModel, onBack: () -> Unit, onAdd: () -> Unit)
     val apps by vm.apps.collectAsStateWithLifecycle()
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TTextButton(onClick = onBack) { Text("← Back") }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            BackButton(onBack)
             Text("App shortcuts", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }
         Text(
@@ -255,8 +255,8 @@ fun AppPickerScreen(vm: RemoteViewModel, onBack: () -> Unit) {
     var custom by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TTextButton(onClick = onBack) { Text("← Back") }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            BackButton(onBack)
             Text("Add apps", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }
 
@@ -468,5 +468,23 @@ private fun LauncherPreview(iconId: String, modifier: Modifier) {
     val bg = if (iconId == "pride") Color(0xFF0E0E14) else Palettes.byId(iconId).bg
     Box(modifier.clip(RoundedCornerShape(percent = 28)).background(bg)) {
         if (resId != 0) Image(painterResource(resId), contentDescription = null, modifier = Modifier.fillMaxSize())
+    }
+}
+
+/** The way back from a settings screen: a large icon button (a text link is a small target). */
+@Composable
+private fun BackButton(onClick: () -> Unit) {
+    val term = LocalTerm.current
+    val shape = if (term.crt) term.controlShape else CircleShape
+    Box(
+        Modifier
+            .size(52.dp)
+            .clip(shape)
+            .pane(shape)
+            .semantics { contentDescription = "Back"; role = Role.Button }
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Glyph("arrow-left", MaterialTheme.colorScheme.primary, Modifier.size(26.dp), strokeWidth = 2.6f)
     }
 }

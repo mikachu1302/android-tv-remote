@@ -152,6 +152,7 @@ class PinMismatchException(message: String) : java.security.cert.CertificateExce
 class RemoteConnection(
     host: String,
     pin: String,
+    private val appVersion: String,
     private val onState: (TvState) -> Unit,
     private val onClosed: (Throwable?) -> Unit,
     /** Debug logging of every message from the TV; null in release builds. */
@@ -190,7 +191,7 @@ class RemoteConnection(
                                 varint(3, 1)
                                 string(4, "1")
                                 string(5, "io.github.mikachu1302.tvremote")
-                                string(6, "0.1.0")
+                                string(6, appVersion)
                             }
                         }.toByteArray())
                     }
