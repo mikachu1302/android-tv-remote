@@ -4,6 +4,9 @@ import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** Which launcher icon to show: the one in the selected colours, or the Progress Pride one. */
+enum class IconChoice { Match, Pride }
+
 /** The "remote behavior" options. */
 data class RemoteSettings(
     val haptics: Boolean = true,
@@ -12,6 +15,12 @@ data class RemoteSettings(
     val keepAwake: Boolean = true,
     /** Dims the screen when idle (for watching TV in the dark). */
     val theater: Boolean = false,
+    val style: UiStyle = UiStyle.Crt,
+    /** A [Palette] id. */
+    val palette: String = "neon",
+    /** Scanlines over the CRT style. */
+    val scanlines: Boolean = true,
+    val icon: IconChoice = IconChoice.Match,
 )
 
 /** A tile in the app row: opens [link] on the TV (a deep link or `market://launch?id=<package>`). */
@@ -94,6 +103,10 @@ fun SharedPreferences.loadSettings() = RemoteSettings(
     smoothPress = getBoolean("smoothPress", true),
     keepAwake = getBoolean("keepAwake", true),
     theater = getBoolean("theater", false),
+    style = UiStyle.entries.firstOrNull { it.name == getString("style", null) } ?: UiStyle.Crt,
+    palette = getString("palette", null) ?: "neon",
+    scanlines = getBoolean("scanlines", true),
+    icon = IconChoice.entries.firstOrNull { it.name == getString("icon", null) } ?: IconChoice.Match,
 )
 
 fun SharedPreferences.Editor.putSettings(s: RemoteSettings): SharedPreferences.Editor = this
@@ -101,6 +114,10 @@ fun SharedPreferences.Editor.putSettings(s: RemoteSettings): SharedPreferences.E
     .putBoolean("smoothPress", s.smoothPress)
     .putBoolean("keepAwake", s.keepAwake)
     .putBoolean("theater", s.theater)
+    .putString("style", s.style.name)
+    .putString("palette", s.palette)
+    .putBoolean("scanlines", s.scanlines)
+    .putString("icon", s.icon.name)
 
 fun parseApps(json: String?): List<AppShortcut> {
     if (json == null) return DEFAULT_APPS
@@ -115,3 +132,17 @@ fun parseApps(json: String?): List<AppShortcut> {
 
 fun appsToJson(apps: List<AppShortcut>): String =
     JSONArray(apps.map { JSONObject().put("name", it.name).put("link", it.link) }).toString()
+
+fun parseTvs(json: String?): List<PairedTv> {
+    if (json == null) return emptyList()
+    return runCatching {
+        val array = JSONArray(json)
+        List(array.length()) { i ->
+            val o = array.getJSONObject(i)
+            PairedTv(o.getString("name"), o.getString("host"), o.getString("pin"))
+        }
+    }.getOrDefault(emptyList())
+}
+
+fun tvsToJson(tvs: List<PairedTv>): String =
+    JSONArray(tvs.map { JSONObject().put("name", it.name).put("host", it.host).put("pin", it.pin) }).toString()

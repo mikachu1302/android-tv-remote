@@ -20,16 +20,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -57,16 +51,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val dark = androidx.compose.foundation.isSystemInDarkTheme()
-            val ctx = LocalContext.current
-            val scheme = when {
-                Build.VERSION.SDK_INT >= 31 -> if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-                dark -> darkColorScheme()
-                else -> lightColorScheme()
-            }
-            MaterialTheme(colorScheme = scheme) {
+            val settings by vm.settings.collectAsStateWithLifecycle()
+            TvRemoteTheme(settings.style, Palettes.byId(settings.palette), settings.scanlines) {
+                val term = LocalTerm.current
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    Box(Modifier.systemBarsPadding()) { App(vm) }
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .termBackground()
+                            .let { if (term.crt && term.scanlines) it.crtOverlay() else it }
+                            .systemBarsPadding(),
+                    ) { App(vm) }
                 }
             }
         }
@@ -128,12 +123,16 @@ private fun App(vm: RemoteViewModel) {
     val paired by vm.paired.collectAsStateWithLifecycle()
     val pairing by vm.pairing.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val adding by vm.addingTv.collectAsStateWithLifecycle()
     var screen by remember { mutableStateOf(Screen.Remote) }
+    // Where Back leads from the app manager: Settings, or the remote when it was opened from there.
+    var appsBack by remember { mutableStateOf(Screen.Settings) }
     LaunchedEffect(paired == null) { screen = Screen.Remote }
+    BackHandler(enabled = adding && pairing == PairingUi.None) { vm.cancelAddTv() }
     BackHandler(enabled = paired != null && screen != Screen.Remote) {
         screen = when (screen) {
             Screen.Picker -> Screen.Apps
-            Screen.Apps -> Screen.Settings
+            Screen.Apps -> appsBack
             else -> Screen.Remote
         }
     }
@@ -141,10 +140,16 @@ private fun App(vm: RemoteViewModel) {
         val tv = paired
         when {
             pairing != PairingUi.None -> PairingScreen(pairing, vm)
-            tv == null -> FindTvScreen(vm)
-            screen == Screen.Remote -> RemoteScreen(tv, vm, onSettings = { screen = Screen.Settings })
-            screen == Screen.Settings -> SettingsScreen(tv, vm, onBack = { screen = Screen.Remote }, onApps = { screen = Screen.Apps })
-            screen == Screen.Apps -> ManageAppsScreen(vm, onBack = { screen = Screen.Settings }, onAdd = { screen = Screen.Picker })
+            tv == null || adding -> FindTvScreen(vm, canCancel = tv != null)
+            screen == Screen.Remote -> RemoteScreen(
+                tv, vm, onSettings = { screen = Screen.Settings },
+                onManageApps = { appsBack = Screen.Remote; screen = Screen.Apps },
+            )
+            screen == Screen.Settings -> SettingsScreen(
+                tv, vm, onBack = { screen = Screen.Remote },
+                onApps = { appsBack = Screen.Settings; screen = Screen.Apps },
+            )
+            screen == Screen.Apps -> ManageAppsScreen(vm, onBack = { screen = appsBack }, onAdd = { screen = Screen.Picker })
             else -> AppPickerScreen(vm, onBack = { screen = Screen.Apps })
         }
     }
@@ -153,8 +158,9 @@ private fun App(vm: RemoteViewModel) {
 // ---------------------------------------------------------------- finding and pairing
 
 @Composable
-private fun FindTvScreen(vm: RemoteViewModel) {
+private fun FindTvScreen(vm: RemoteViewModel, canCancel: Boolean) {
     val context = LocalContext.current
+    val paired by vm.tvs.collectAsStateWithLifecycle()
     var allowed by remember {
         mutableStateOf(
             Build.VERSION.SDK_INT < 37 ||
@@ -167,10 +173,10 @@ private fun FindTvScreen(vm: RemoteViewModel) {
     }
 
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Find your TV", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text(if (canCancel) "Add a TV" else "Find your TV", fontSize = 28.sp, fontWeight = FontWeight.Bold)
         if (!allowed) {
             Text("The app needs access to devices on your network to find the TV.")
-            Button(onClick = { ask.launch(Manifest.permission.ACCESS_LOCAL_NETWORK) }) { Text("Allow") }
+            TButton(onClick = { ask.launch(Manifest.permission.ACCESS_LOCAL_NETWORK) }) { Text("Allow") }
             return@Column
         }
         var tvs by remember { mutableStateOf(emptyList<Tv>()) }
@@ -180,11 +186,13 @@ private fun FindTvScreen(vm: RemoteViewModel) {
         } else {
             Text("Tap your TV to pair:")
             tvs.forEach { tv ->
-                Button(onClick = { vm.startPairing(tv) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                    Text(tv.name)
+                val already = paired.any { it.name == tv.name }
+                TButton(onClick = { vm.startPairing(tv) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                    Text(if (already) "${tv.name} (paired – pair again)" else tv.name)
                 }
             }
         }
+        if (canCancel) TTextButton(onClick = vm::cancelAddTv) { Text("Cancel") }
     }
 }
 
@@ -207,7 +215,7 @@ private fun PairingScreen(state: PairingUi, vm: RemoteViewModel) {
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Button(
+                TButton(
                     onClick = { vm.submitCode(code) },
                     enabled = code.length == 6,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -218,7 +226,7 @@ private fun PairingScreen(state: PairingUi, vm: RemoteViewModel) {
             }
             PairingUi.None -> Unit
         }
-        TextButton(onClick = vm::cancelPairing) { Text("Cancel") }
+        TTextButton(onClick = vm::cancelPairing) { Text("Cancel") }
     }
 }
 

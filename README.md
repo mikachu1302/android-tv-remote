@@ -14,6 +14,8 @@ uses – over your local network.
   add the app that is open on the TV with one tap, or enter a package name
 - Holding a button acts like holding it on a physical remote
 - Reconnects by itself (also after the screen locked or the TV's address changed)
+- Two looks (Neon CRT and Glass) and nine colour palettes, all switchable in Settings;
+  the launcher icon follows the colours, or shows the Progress Pride flag
 - Settings: haptics, smooth press, keep screen awake, theater mode
 - No ads, no tracking, no accounts; talks only to your TV
 
@@ -28,3 +30,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Requires the Android SDK (platform 37) and a JDK. See `AGENTS.md` for details.
+
+## Credits
+
+Logo shapes: [Simple Icons](https://simpleicons.org) (CC0); the brands are trademarks of their
+owners. Fonts: VT323 and Fira Code (SIL Open Font License, see `licenses/`).

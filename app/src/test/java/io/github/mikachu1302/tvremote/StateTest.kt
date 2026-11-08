@@ -159,3 +159,14 @@ class AppNameTest {
         assertEquals("From TV", shortcutForPackage("com.example.coolplayer.tv", "From TV").name)
     }
 }
+
+class PairedTvStorageTest {
+    @Test
+    fun tvListRoundTripsThroughJson() {
+        // Made-up names, addresses and fingerprints.
+        val tvs = listOf(PairedTv("Living room", "192.0.2.10", "ab12"), PairedTv("Bedroom \"B\"", "192.0.2.11", "cd34"))
+        assertEquals(tvs, parseTvs(tvsToJson(tvs)))
+        assertEquals(emptyList<PairedTv>(), parseTvs(null))
+        assertEquals(emptyList<PairedTv>(), parseTvs("garbage"))
+    }
+}

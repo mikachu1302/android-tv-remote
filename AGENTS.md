@@ -36,6 +36,7 @@ description.
 ./gradlew assembleDebug        # debug APK: app/build/outputs/apk/debug/app-debug.apk
 ./gradlew test                 # JVM unit tests (protobuf codec, pairing hash)
 ./gradlew lint                 # Android lint – fix findings, don't silence them
+python3 tools/gen_launcher_icons.py   # regenerate launcher icons + manifest aliases after a palette change
 ~/Android/Sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
 ~/Android/Sdk/platform-tools/adb logcat --pid=$(adb shell pidof io.github.mikachu1302.tvremote)
 ```
@@ -98,14 +99,37 @@ All in `app/src/main/java/io/github/mikachu1302/tvremote/`:
 - `Discovery.kt` – mDNS search for TVs (`NsdManager`)
 - `Prefs.kt` – settings, app-shortcut storage (SharedPreferences, org.json) and the `CATALOG` of apps
   the picker offers
+- `Theme.kt` – the two styles (Neon CRT, Glass), the palettes, fonts, glow/pane helpers, themed buttons
+- `Controls.kt` – `RemoteButton` (one button, drawn per style) and `AppTile` (logo or initials)
+- `Icons.kt` – drawn icons from SVG path data; `AppLogos.kt` – app logo shapes (generated, see below)
+- `LauncherIcon.kt` – switches the launcher icon alias to match the palette or Pride
 - `RemoteViewModel.kt` – paired TV, connection loop, TV state, voice, settings, pairing
-- `MainActivity.kt` – activity (keep-awake, theater mode), screen router, find/pair screens
+- `MainActivity.kt` – activity (theme, keep-awake, theater mode), screen router, find/pair screens
 - `RemoteScreen.kt` – the remote (app row, D-pad / number pad, buttons, keyboard bar, drawn icons)
 - `SettingsScreens.kt` – settings and app-shortcut manager
 
 Keep the protocol files (`Proto`, `Pairing`, `Remote`) free of UI code and well separated
 from `Tls`/`Discovery`: an iOS port would reimplement them in Swift, and the protocol
 notes above plus these files are its spec.
+
+## Appearance
+
+- **Two styles, one layout.** Neon CRT: square keys, glow, scanlines, text labels, VT323.
+  Glass: round keys, soft glow, circular dial, icons, Fira Code. The user picks style and palette
+  in Settings; everything reads `LocalTerm` (style + palette), never hard-coded colours. CRT text is
+  scaled up through the density's font scale (VT323 is drawn small), so write sizes as plain `sp`.
+- **Palettes** live in `Palettes` (`Theme.kt`): `primary` = alive (on, connected, plus/minus),
+  `action` = the action (OK, the app that is open, the mic), `soft` = quiet third colour. `PaletteTest`
+  enforces contrast (text 7:1, other text 4.5:1, borders 3:1): a new palette must pass it.
+- **Launcher icons** are generated, one per palette plus Progress Pride, behind manifest aliases:
+  after changing a palette run `python3 tools/gen_launcher_icons.py` (`LauncherResourcesTest` fails
+  when they are out of date). Android cannot recolour an icon at runtime, hence the aliases.
+- **App logos:** `AppLogos.kt` holds shapes from the Simple Icons collection (CC0, simpleicons.org);
+  the brands are trademarks of their owners and the shapes only say which app a tile opens. Apps
+  without a logo get an initials tile. Don't draw imitation logos.
+- **Fonts:** VT323 and Fira Code (SIL OFL, licences in `licenses/`).
+- Long explanations go behind a small "i" (`InfoButton`), not into the list: settings titles stay
+  on one line. Cards side by side have equal height (`IntrinsicSize.Max` + `fillMaxHeight`).
 
 ## Conventions
 
@@ -120,8 +144,8 @@ notes above plus these files are its spec.
   (`play.google.com/store/apps/details?id=<package>` must answer 200 with the right title)
   before adding it; don't add one from memory. The picker also offers the app that is open
   on the TV (any package works through `market://launch?id=`), so a missing app is never a dead end.
-- Icons are drawn with `Canvas`: fonts on phones lack many symbols (⏻ showed as a box).
-  No app logos in the repo; tiles use a colour from the name.
+- Icons are drawn from path data (`Icons.kt`): fonts on phones lack many symbols (⏻ and ✓ showed as
+  boxes or odd glyphs).
 - Connection problems show a plain message and a retry – never a crash or a silent
   failure. A press while disconnected reconnects.
 - New dependencies need a reason; prefer the platform and the Compose libraries already

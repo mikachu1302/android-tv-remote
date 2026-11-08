@@ -37,8 +37,17 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("tv", 0)
     private val debug = app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
-    private val _paired = MutableStateFlow(loadPaired())
+    /** Every paired TV; one of them is the active one the remote controls. */
+    private val _tvs = MutableStateFlow(loadTvs())
+    val tvs: StateFlow<List<PairedTv>> = _tvs
+
+    private val _paired = MutableStateFlow(_tvs.value.let { it.getOrNull(prefs.getInt("activeTv", 0)) ?: it.firstOrNull() })
+    /** The active TV, null when none is paired. */
     val paired: StateFlow<PairedTv?> = _paired
+
+    /** The user is pairing one more TV on top of the ones they have. */
+    private val _addingTv = MutableStateFlow(false)
+    val addingTv: StateFlow<Boolean> = _addingTv
 
     private val _link = MutableStateFlow(Link.Idle)
     val link: StateFlow<Link> = _link
@@ -68,10 +77,27 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     // One sender at a time, in submission order: fast typing must not reorder edits.
     private val sender = Dispatchers.IO.limitedParallelism(1)
 
-    private fun loadPaired(): PairedTv? {
-        val host = prefs.getString("host", null) ?: return null
-        val pin = prefs.getString("pin", null) ?: return null
-        return PairedTv(prefs.getString("name", host)!!, host, pin)
+    init {
+        // Make the launcher icon match the saved settings (also after an update).
+        viewModelScope.launch(Dispatchers.IO) { LauncherIcon.apply(getApplication(), _settings.value) }
+    }
+
+    private fun loadTvs(): List<PairedTv> {
+        prefs.getString("tvs", null)?.let { return parseTvs(it) }
+        // Older versions stored a single TV under three keys.
+        val host = prefs.getString("host", null) ?: return emptyList()
+        val pin = prefs.getString("pin", null) ?: return emptyList()
+        return listOf(PairedTv(prefs.getString("name", host)!!, host, pin))
+    }
+
+    private fun saveTvs(list: List<PairedTv>, active: PairedTv?) {
+        _tvs.value = list
+        _paired.value = active
+        prefs.edit()
+            .putString("tvs", tvsToJson(list))
+            .putInt("activeTv", list.indexOf(active).coerceAtLeast(0))
+            .remove("host").remove("pin").remove("name") // the old single-TV keys
+            .apply()
     }
 
     // ------------------------------------------------------------ connection
@@ -83,15 +109,7 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The app left the screen: close the connection (the TV frees the session; no battery use). */
-    fun onBackground() {
-        stopVoice()
-        loop?.cancel()
-        loop = null
-        connection?.close()
-        connection = null
-        _tvState.value = TvState()
-        if (_paired.value != null) _link.value = Link.Idle
-    }
+    fun onBackground() = stopConnection()
 
     private suspend fun connectionLoop() {
         var wait = 500L
@@ -138,8 +156,8 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
             }
         }.getOrNull()?.firstOrNull { it.name == tv.name } ?: return
         if (found.host == tv.host) return
-        prefs.edit().putString("host", found.host).apply()
-        _paired.value = tv.copy(host = found.host)
+        val moved = tv.copy(host = found.host)
+        saveTvs(_tvs.value.map { if (it.name == tv.name) moved else it }, moved)
     }
 
     /** Called when the user taps the status: retry right now instead of waiting. */
@@ -225,10 +243,19 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ settings and apps
 
+    private var iconJob: Job? = null
+
     fun updateSettings(change: (RemoteSettings) -> RemoteSettings) {
         val next = change(_settings.value)
         _settings.value = next
         prefs.edit().putSettings(next).apply()
+        // The launcher icon follows the colours, a moment after the last change (the launcher
+        // flickers on every switch, and the user is usually still trying palettes).
+        iconJob?.cancel()
+        iconJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(1_500)
+            LauncherIcon.apply(getApplication(), next)
+        }
     }
 
     private fun saveApps(list: List<AppShortcut>) {
@@ -284,14 +311,13 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
             }
             val pin = session.serverPin
             if (ok && pin != null) {
-                prefs.edit()
-                    .putString("host", state.tv.host)
-                    .putString("name", state.tv.name)
-                    .putString("pin", pin)
-                    .apply()
+                val tv = PairedTv(state.tv.name, state.tv.host, pin)
                 pairingSession = null
                 _pairing.value = PairingUi.None
-                _paired.value = PairedTv(state.tv.name, state.tv.host, pin)
+                _addingTv.value = false
+                // Pairing a TV again replaces its entry; a new one is added and becomes active.
+                stopConnection()
+                saveTvs(_tvs.value.filter { it.name != tv.name } + tv, tv)
                 onForeground()
             } else {
                 // The TV closes the session after a bad code: start over, it shows a fresh one.
@@ -307,14 +333,35 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         _pairing.value = PairingUi.None
     }
 
-    /** Forgets the TV (to pair with another one). */
-    fun forget() {
+    /** Opens the "find a TV" screen on top of the TVs already paired. */
+    fun beginAddTv() { _addingTv.value = true }
+
+    fun cancelAddTv() { _addingTv.value = false }
+
+    /** Makes [tv] the one the remote controls. */
+    fun selectTv(tv: PairedTv) {
+        if (tv == _paired.value) return
+        stopConnection()
+        saveTvs(_tvs.value, tv)
+        onForeground()
+    }
+
+    /** Forgets a TV. Only the TV's entry goes: settings and app shortcuts stay. */
+    fun forgetTv(tv: PairedTv) {
+        val rest = _tvs.value.filter { it.name != tv.name }
+        val wasActive = _paired.value?.name == tv.name
+        if (wasActive) stopConnection()
+        saveTvs(rest, if (wasActive) rest.firstOrNull() else _paired.value)
+        if (wasActive && rest.isNotEmpty()) onForeground()
+    }
+
+    /** Closes the connection and stops reconnecting, without touching what is paired. */
+    private fun stopConnection() {
+        stopVoice()
         loop?.cancel()
         loop = null
         connection?.close()
         connection = null
-        prefs.edit().clear().apply()
-        _paired.value = null
         _tvState.value = TvState()
         _link.value = Link.Idle
     }
