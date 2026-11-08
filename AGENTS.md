@@ -99,8 +99,11 @@ The same protocol Google's own remote uses. Reference: `tronikos/androidtvremote
   Power on = Wake-on-LAN magic packet to the MAC the user types in (`Wol`); the TV must have it enabled. VIDAA's
   own remote protocol (MQTT over TLS on port 36669) needs a client certificate issued by Hisense's "RemoteCA":
   without it the TLS handshake fails, so keys, power-off and input switching are NOT available that way, and
-  Hisense's key must not be copied into this repo. Bluetooth HID (phone as keyboard/remote) is the untried route
-  for power-off and input.
+  Hisense's key must not be copied into this repo. **Tried and dropped: the phone as a Bluetooth HID remote** (LE HID over
+  GATT and classic `BluetoothHidDevice`, both worked on the phone and were visible to a laptop scan), but the TV's Bluetooth
+  device list never showed the phone (it listed the waipu stick, an audio adapter and its own remote): it filters on something
+  an Android app cannot set (device class / GAP appearance). Power-off and input switching therefore need a Wi-Fi IR bridge
+  (Broadlink-style) or the Hisense app.
 - **Connection life:** the app connects when it is visible and closes the connection in the
   background; the loop retries with backoff (0.5 s … 8 s), re-finds the TV by its mDNS
   name when its address changed, and stops with a message if the pinned certificate no
