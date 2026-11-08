@@ -2,6 +2,7 @@ package io.github.mikachu1302.tvremote
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -563,11 +564,16 @@ private fun PagerDots(state: PagerState) {
     }
 }
 
-/** Playback, TV and colour keys, and the stick's sleep/wake: five rows of four (see [MORE_KEYS]). */
+/**
+ * Playback, TV and colour keys, and the stick's sleep/wake: five rows of four (see [MORE_KEYS]);
+ * with a TV chosen in Settings, a sixth row switches that TV on (Wake-on-LAN).
+ */
 @Composable
 private fun MoreKeysPage(vm: RemoteViewModel) {
     val gap = if (LocalTerm.current.crt) 6.dp else 8.dp
-    Column(Modifier.fillMaxWidth().heightIn(max = 290.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
+    val tv by vm.audioTv.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    Column(Modifier.fillMaxWidth().heightIn(max = 340.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
         MORE_KEYS.forEach { row ->
             Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(gap)) {
                 row.forEach { key ->
@@ -580,6 +586,15 @@ private fun MoreKeysPage(vm: RemoteViewModel) {
                     }
                 }
             }
+        }
+        if (tv != null) {
+            RemoteButton(
+                "Switch the TV on", null, vm, Modifier.fillMaxWidth().weight(1f), look = Look.Primary,
+                onClick = {
+                    val message = if (vm.wakeTv()) "Wake signal sent (works when the TV is fully in standby)" else "Enter the TV's MAC address in Settings > TV volume and power first"
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                },
+            ) { color -> Text(if (LocalTerm.current.crt) "TV ON" else "TV on", color = color, fontSize = 15.sp, maxLines = 1) }
         }
     }
 }

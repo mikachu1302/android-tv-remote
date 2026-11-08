@@ -96,10 +96,12 @@ The same protocol Google's own remote uses. Reference: `tronikos/androidtvremote
   SSDP, description at `/MediaServer/rendererdevicedesc.xml`): its standard `RenderingControl` service answers
   `GetVolume`/`GetMute` and accepts `SetVolume`/`SetMute` (0-100) over plain HTTP + SOAP, no pairing (`TvAudio.kt`:
   `AudioClient`, `Upnp`; SSDP can miss the TV, so `discoverAudioTvs` also probes the phone's /24 for the port).
-  Power on from the app does NOT work: a Wake-on-LAN packet (verified from a laptop, wake-on-Wi-Fi enabled on the TV) does
-  nothing, because the TV's power button only blanks the screen (quick-start standby: UPnP and port 36669 keep answering). The
-  feature was removed again (0.4.2).
-  VIDAA's own remote protocol (MQTT over TLS on port 36669) needs a client certificate issued by Hisense's "RemoteCA":
+  Power on = Wake-on-LAN magic packet to the MAC the user types in (`Wol`; the TV's Wi-Fi/network MAC, from the
+  neighbour table or the TV's network info); the TV must have wake-on-LAN/Wi-Fi enabled. **It only wakes the TV from real
+  standby** (verified with a laptop: the TV was silent on the network, the packet brought it up in about 6 s). Right after the
+  user powers off with the original remote the TV is in quick-start standby (screen dark, UPnP and port 36669 still answer)
+  and ignores the packet; a few minutes later it drops into real standby. VIDAA's
+  own remote protocol (MQTT over TLS on port 36669) needs a client certificate issued by Hisense's "RemoteCA":
   without it the TLS handshake fails, so keys, power-off and input switching are NOT available that way, and
   Hisense's key must not be copied into this repo. **Tried and dropped: the phone as a Bluetooth HID remote** (LE HID over
   GATT and classic `BluetoothHidDevice`, both worked on the phone and were visible to a laptop scan), but the TV's Bluetooth
@@ -124,7 +126,7 @@ All in `app/src/main/java/io/github/mikachu1302/tvremote/`:
   pure `TvState.apply` and `textEdit`; no UI types (`Voice.kt` needs `AudioRecord`)
 - `Tls.kt` – keystore identity, pinned TLS socket (the only Android-specific protocol file)
 - `Discovery.kt` – mDNS search for TVs (`NsdManager`), SSDP + subnet search for UPnP renderers
-- `TvAudio.kt` – the TV's own volume (UPnP RenderingControl, plain-socket HTTP)
+- `TvAudio.kt` – the TV's own volume (UPnP RenderingControl, plain-socket HTTP) and Wake-on-LAN
 - `Prefs.kt` – settings, app-shortcut storage (SharedPreferences, org.json) and the `CATALOG` of apps
   the picker offers
 - `Theme.kt` – the two styles (Neon CRT, Glass), the palettes, fonts, glow/pane helpers, themed buttons

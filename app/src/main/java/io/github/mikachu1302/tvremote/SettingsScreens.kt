@@ -132,17 +132,20 @@ fun SettingsScreen(tv: PairedTv, vm: RemoteViewModel, onBack: () -> Unit, onApps
     }
 }
 
-/** The TV's own volume: pick the TV once, then the volume keys control it. */
+/** The TV's own volume and wake-up: pick the TV once, then the volume keys control it. */
 @Composable
 private fun TvVolumeSection(settings: RemoteSettings, vm: RemoteViewModel) {
     val tv by vm.audioTv.collectAsStateWithLifecycle()
     val audio by vm.audio.collectAsStateWithLifecycle()
     var choosing by remember { mutableStateOf(false) }
     Section(
-        "TV volume",
+        "TV volume and power",
         "TVs with a UPnP media renderer (Hisense VIDAA has one) let apps read and set their volume over the network, " +
             "so the volume keys control the TV itself and show its level. The first time, the TV asks on screen whether " +
-            "this phone may control it: allow it with the TV's remote.",
+            "this phone may control it: allow it with the TV's remote. To switch the TV on from standby the app sends " +
+            "a Wake-on-LAN packet: turn that on in the TV's settings and enter the TV's MAC address here (a network " +
+            "address of six hex pairs; the TV lists it under network information). It works once the TV is fully in " +
+            "standby, a few minutes after switching it off (right after, the TV only blanks its screen and ignores it).",
     )
     SectionCard {
         val current = tv
@@ -163,6 +166,23 @@ private fun TvVolumeSection(settings: RemoteSettings, vm: RemoteViewModel) {
             SwitchRow("Volume keys control the TV", "Off: the volume keys go to the stick again.", settings.tvVolume) {
                 vm.updateSettings { s -> s.copy(tvVolume = it) }
             }
+            key(current.name) {
+                var text by remember { mutableStateOf(current.mac.orEmpty()) }
+                val valid = text.isBlank() || Wol.parseMac(text) != null
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = {
+                        text = it
+                        if (it.isBlank() || Wol.parseMac(it) != null) vm.setWakeAddress(it)
+                    },
+                    label = { Text("TV MAC address (Wake-on-LAN)") },
+                    placeholder = { Text("AA:BB:CC:DD:EE:FF") },
+                    isError = !valid,
+                    supportingText = if (valid) null else ({ Text("Six pairs of hex digits, like AA:BB:CC:DD:EE:FF") }),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                )
+            }
         }
     }
     if (choosing) ChooseAudioTvDialog(vm, onDismiss = { choosing = false })
@@ -174,6 +194,7 @@ private fun ChooseAudioTvDialog(vm: RemoteViewModel, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var round by remember { mutableStateOf(0) }
     var found by remember { mutableStateOf<List<AudioTv>?>(null) }
+    val previous by vm.audioTv.collectAsStateWithLifecycle()
     LaunchedEffect(round) {
         found = null
         found = runCatching { discoverAudioTvs(context) }.getOrDefault(emptyList())
@@ -194,7 +215,8 @@ private fun ChooseAudioTvDialog(vm: RemoteViewModel, onDismiss: () -> Unit) {
                                 Text(item.host, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             TOutlinedButton(onClick = {
-                                vm.setAudioTv(item)
+                                // Keep the wake address when the same TV is chosen again.
+                                vm.setAudioTv(item.copy(mac = previous?.takeIf { it.name == item.name }?.mac))
                                 onDismiss()
                             }) { Text("Use") }
                         }

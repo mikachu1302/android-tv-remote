@@ -168,9 +168,10 @@ fun parseAudioTv(json: String?): AudioTv? {
     if (json == null) return null
     return runCatching {
         val o = JSONObject(json)
-        AudioTv(o.getString("name"), o.getString("host"), o.getInt("port"), o.getString("control"))
+        AudioTv(o.getString("name"), o.getString("host"), o.getInt("port"), o.getString("control"), o.optString("mac").ifEmpty { null })
     }.getOrNull()
 }
 
 fun audioTvToJson(tv: AudioTv): String =
-    JSONObject().put("name", tv.name).put("host", tv.host).put("port", tv.port).put("control", tv.control).toString()
+    JSONObject().put("name", tv.name).put("host", tv.host).put("port", tv.port).put("control", tv.control)
+        .apply { tv.mac?.let { put("mac", it) } }.toString()

@@ -2,6 +2,7 @@ package io.github.mikachu1302.tvremote
 
 import android.app.Application
 import android.content.pm.ApplicationInfo
+import android.net.ConnectivityManager
 import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
+import java.net.Inet4Address
 
 data class PairedTv(val name: String, val host: String, val pin: String)
 
@@ -307,6 +309,34 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         _audioTv.value = tv
         _audio.value = null
         prefs.edit().apply { if (tv == null) remove("audioTv") else putString("audioTv", audioTvToJson(tv)) }.apply()
+    }
+
+    /** Sets the TV's MAC address for Wake-on-LAN; an empty text clears it. */
+    fun setWakeAddress(text: String) {
+        val tv = _audioTv.value ?: return
+        setAudioTv(tv.copy(mac = text.trim().ifEmpty { null }))
+    }
+
+    /** The broadcast address of each IPv4 network the phone is on (the home Wi-Fi). */
+    private fun directedBroadcasts(): List<String> {
+        val cm = getApplication<Application>().getSystemService(ConnectivityManager::class.java)
+        val addresses = cm.getLinkProperties(cm.activeNetwork)?.linkAddresses.orEmpty()
+        return addresses.filter { it.address is Inet4Address }.map { Wol.broadcastOf(it.address.address, it.prefixLength) }
+    }
+
+    /** Switches the TV on from standby with a Wake-on-LAN packet. False when there is no address to wake. */
+    fun wakeTv(): Boolean {
+        val tv = _audioTv.value
+        val mac = tv?.mac?.let(Wol::parseMac) ?: return false
+        viewModelScope.launch(Dispatchers.IO) {
+            val targets = buildList {
+                add("255.255.255.255")
+                addAll(directedBroadcasts())
+                add(tv.host)
+            }.distinct()
+            Wol.send(mac, targets)
+        }
+        return true
     }
 
     /** The user edited the keyboard field from [old] to [new]; mirror that on the TV. */
