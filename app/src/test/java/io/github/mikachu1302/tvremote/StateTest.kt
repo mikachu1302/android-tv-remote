@@ -170,3 +170,31 @@ class PairedTvStorageTest {
         assertEquals(emptyList<PairedTv>(), parseTvs("garbage"))
     }
 }
+
+class MoreKeysTest {
+    @Test
+    fun fiveRowsOfFourWithNoDuplicates() {
+        assertEquals(5, MORE_KEYS.size)
+        MORE_KEYS.forEach { assertEquals(4, it.size) }
+        val keys = MORE_KEYS.flatten()
+        assertEquals(keys.size, keys.map { it.code }.toSet().size)
+        assertEquals(keys.size, keys.map { it.label }.toSet().size)
+        assertEquals(keys.size, keys.map { it.description }.toSet().size)
+    }
+
+    @Test
+    fun codesMatchTheProtocol() {
+        // Android key codes as listed in the protocol's RemoteKeyCode enum.
+        val expected = mapOf(
+            "PREV" to 88, "REW" to 89, "FF" to 90, "NEXT" to 87, "PLAY" to 126, "PAUSE" to 127, "STOP" to 86,
+            "CC" to 175, "GUIDE" to 172, "INFO" to 165, "LAST" to 229, "TXT" to 233, "RED" to 183, "GREEN" to 184,
+            "YELLOW" to 185, "BLUE" to 186, "SLEEP" to 223, "WAKE" to 224, "APPS" to 284, "SET" to 176,
+        )
+        assertEquals(expected, MORE_KEYS.flatten().associate { it.label to it.code })
+    }
+
+    @Test
+    fun everyKeyHasOneWayOfBeingDrawnOrIsText() {
+        MORE_KEYS.flatten().forEach { assertTrue("${it.label}: glyph and colour together", it.glyph == null || it.color == null) }
+    }
+}

@@ -35,6 +35,9 @@ private val STROKED = mapOf(
     "left" to "M15 6l-6 6 6 6",
     "right" to "M9 6l6 6-6 6",
     "arrow-left" to "M19 12H5M11 6l-6 6 6 6",
+    "menu" to "M4 7h16M4 12h16M4 17h16",
+    "grip" to "M5 8h14M5 12h14M5 16h14",
+    "plus" to "M12 5v14M5 12h14",
     "check" to "M5 12.5l5 5L19.5 7",
     "info" to "M21 12a9 9 0 1 1-18 0a9 9 0 1 1 18 0M12 11v5M12 8h.01",
     "dpad" to "M12 2.5l3 4h-6zM12 21.5l3-4h-6zM2.5 12l4-3v6zM21.5 12l-4-3v6zM12 10.5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3",
@@ -45,6 +48,14 @@ private val FILLED = mapOf(
     "tri-down" to "M12 19L3 6h18z",
     "tri-left" to "M5 12l13-9v18z",
     "tri-right" to "M19 12L6 3v18z",
+    // Media keys: solid shapes on the same 24 x 24 grid.
+    "play" to "M8 5v14l11-7z",
+    "pause" to "M6 5h4v14H6zM14 5h4v14h-4z",
+    "stop" to "M6 6h12v12H6z",
+    "rew" to "M11 6v12l-8.5-6zM21 6v12l-8.5-6z",
+    "ff" to "M13 6v12l8.5-6zM3 6v12l8.5-6z",
+    "prev" to "M5 6h2v12H5zM20 6v12L8.5 12z",
+    "next" to "M17 6h2v12h-2zM4 6v12l11.5-6z",
 )
 
 /** A stroked icon by name. */
@@ -58,14 +69,18 @@ fun Glyph(name: String, color: Color, modifier: Modifier = Modifier.size(22.dp),
     }
 }
 
-/** A solid triangle arrow (the CRT style's D-pad). */
+/** A solid shape by name: the CRT D-pad's triangles and the media keys. */
 @Composable
-fun Triangle(direction: String, color: Color, modifier: Modifier = Modifier.size(30.dp)) {
-    val path = remember(direction) { PathParser().parsePathString(FILLED.getValue("tri-$direction")).toPath() }
+fun Solid(name: String, color: Color, modifier: Modifier = Modifier.size(24.dp)) {
+    val path = remember(name) { PathParser().parsePathString(FILLED.getValue(name)).toPath() }
     Canvas(modifier) {
         scale(size.minDimension / 24f, pivot = Offset.Zero) { drawPath(path, color) }
     }
 }
+
+/** A solid triangle arrow (the CRT style's D-pad). */
+@Composable
+fun Triangle(direction: String, color: Color, modifier: Modifier = Modifier.size(30.dp)) = Solid("tri-$direction", color, modifier)
 
 /** An app's logo from [APP_LOGOS] as a filled shape, with a faint halo when [halo] is set. */
 @Composable

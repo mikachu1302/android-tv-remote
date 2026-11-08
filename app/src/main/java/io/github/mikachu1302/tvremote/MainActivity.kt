@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { Remote, Settings, Apps, Picker }
+private enum class Screen { Remote, Settings, Apps }
 
 @Composable
 private fun App(vm: RemoteViewModel) {
@@ -125,16 +125,12 @@ private fun App(vm: RemoteViewModel) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val adding by vm.addingTv.collectAsStateWithLifecycle()
     var screen by remember { mutableStateOf(Screen.Remote) }
-    // Where Back leads from the app manager: Settings, or the remote when it was opened from there.
+    // Back from the app shortcuts: Settings, or the remote when "+" in the app row opened it.
     var appsBack by remember { mutableStateOf(Screen.Settings) }
     LaunchedEffect(paired == null) { screen = Screen.Remote }
     BackHandler(enabled = adding && pairing == PairingUi.None) { vm.cancelAddTv() }
     BackHandler(enabled = paired != null && screen != Screen.Remote) {
-        screen = when (screen) {
-            Screen.Picker -> Screen.Apps
-            Screen.Apps -> appsBack
-            else -> Screen.Remote
-        }
+        screen = if (screen == Screen.Apps) appsBack else Screen.Remote
     }
     CompositionLocalProvider(LocalSettings provides settings) {
         val tv = paired
@@ -143,14 +139,13 @@ private fun App(vm: RemoteViewModel) {
             tv == null || adding -> FindTvScreen(vm, canCancel = tv != null)
             screen == Screen.Remote -> RemoteScreen(
                 tv, vm, onSettings = { screen = Screen.Settings },
-                onManageApps = { appsBack = Screen.Remote; screen = Screen.Apps },
+                onAddApp = { appsBack = Screen.Remote; screen = Screen.Apps },
             )
             screen == Screen.Settings -> SettingsScreen(
                 tv, vm, onBack = { screen = Screen.Remote },
                 onApps = { appsBack = Screen.Settings; screen = Screen.Apps },
             )
-            screen == Screen.Apps -> ManageAppsScreen(vm, onBack = { screen = appsBack }, onAdd = { screen = Screen.Picker })
-            else -> AppPickerScreen(vm, onBack = { screen = Screen.Apps })
+            else -> AppShortcutsScreen(vm, onBack = { screen = appsBack })
         }
     }
 }

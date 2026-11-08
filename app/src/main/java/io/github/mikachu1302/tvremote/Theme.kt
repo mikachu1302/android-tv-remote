@@ -63,6 +63,8 @@ data class Palette(
     val action: Color,
     val soft: Color,
     val warn: Color,
+    /** A palette with a rainbow in it (Pride): shown as dots in its chip and as the ring of the dial. */
+    val stripes: List<Color>? = null,
 )
 
 private fun c(hex: Long) = Color(0xFF000000 or hex)
@@ -114,7 +116,15 @@ object Palettes {
         soft = c(0x00CC66), warn = c(0xFFD23F),
     )
 
-    val all = listOf(Neon, Dracula, Synthwave, Catppuccin, Gruvbox, Tokyo, Nord, Amber, Matrix)
+    /** Inspired by the Progress Pride flag: light blue and pink as the accents, the six stripes as the rainbow. */
+    val Pride = Palette(
+        "pride", "Pride", bg = c(0x100E17), surface = c(0x1B1826), border = c(0x7B6FA0),
+        text = c(0xF6F2FF), dim = c(0xC2B8DE), primary = c(0x74D7EE), action = c(0xFF7EB3),
+        soft = c(0xFFED00), warn = c(0xFF8C00),
+        stripes = listOf(c(0xFF4B4B), c(0xFF8C00), c(0xFFED00), c(0x2FD05B), c(0x3D7BFF), c(0xA24BD6)),
+    )
+
+    val all = listOf(Neon, Dracula, Synthwave, Catppuccin, Gruvbox, Tokyo, Nord, Amber, Matrix, Pride)
 
     fun byId(id: String?): Palette = all.firstOrNull { it.id == id } ?: Neon
 }

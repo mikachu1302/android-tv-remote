@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -74,12 +75,22 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
-fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit, onManageApps: () -> Unit) {
+fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit, onAddApp: () -> Unit) {
     val link by vm.link.collectAsStateWithLifecycle()
     val state by vm.tvState.collectAsStateWithLifecycle()
     val apps by vm.apps.collectAsStateWithLifecycle()
@@ -101,7 +112,7 @@ fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit, onMa
     }
     BackHandler(enabled = keyboard != null) { keyboard = null }
 
-    var keypad by remember { mutableStateOf(false) }
+    val pager = rememberPagerState { PadPage.entries.size }
 
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     fun micDown() {
@@ -115,9 +126,15 @@ fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit, onMa
     val powerLabel = "Power, " + when (state.on) { true -> "on"; false -> "off"; null -> "state unknown" }
     val volume = state.volume
 
-    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // The screen fits without scrolling: the pad pages take the space the rest leaves. Only a
+        // very short window falls back to scrolling with a fixed-size pad.
+        val tight = maxHeight < 640.dp
+        val scroll = rememberScrollState()
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.fillMaxSize()
+                .then(if (tight) Modifier.verticalScroll(scroll) else Modifier)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -127,15 +144,25 @@ fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit, onMa
                 GlassHeader(tv, vm, chips, on, powerLabel, onSettings)
             }
 
-            AppRow(apps, currentApp, vm, onManageApps)
+            AppRow(apps, currentApp, vm, onAddApp)
 
-            Box(Modifier.fillMaxWidth().height(288.dp), contentAlignment = Alignment.Center) {
-                when {
-                    keypad -> Keypad(vm)
-                    term.crt -> CrtPad(vm)
-                    else -> GlassDial(vm)
+            // Swipe sideways: D-pad, number pad, more keys.
+            HorizontalPager(
+                state = pager,
+                modifier = (if (tight) Modifier.height(280.dp) else Modifier.weight(1f)).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) { index ->
+                CompositionLocalProvider(LocalSwipeable provides true) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        when (PadPage.entries[index]) {
+                            PadPage.Pad -> if (term.crt) CrtPad(vm) else GlassDial(vm)
+                            PadPage.Numbers -> Keypad(vm)
+                            PadPage.More -> MoreKeysPage(vm)
+                        }
+                    }
                 }
             }
+            PagerDots(pager)
 
             Row(
                 Modifier.fillMaxWidth(),
@@ -157,10 +184,7 @@ fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit, onMa
                         ClusterKey("KBD", "Keyboard", "kbd", vm, null, active = keyboard != null,
                             onClick = { if (keyboard == null) openKeyboard("") else keyboard = null })
                         ClusterKey("HOME", "Home", "home", vm, Key.HOME)
-                        ClusterKey(
-                            if (keypad) "PAD" else "NUM", if (keypad) "Show directional pad" else "Show number pad",
-                            if (keypad) "dpad" else "pad", vm, null, onClick = { keypad = !keypad },
-                        )
+                        ClusterKey("MENU", "Menu", "menu", vm, Key.MENU)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         ClusterKey(
@@ -350,7 +374,7 @@ private fun TvSwitcher(active: PairedTv, vm: RemoteViewModel) {
 // ------------------------------------------------------------------ app row
 
 @Composable
-private fun AppRow(apps: List<AppShortcut>, current: AppShortcut?, vm: RemoteViewModel, onManageApps: () -> Unit) {
+private fun AppRow(apps: List<AppShortcut>, current: AppShortcut?, vm: RemoteViewModel, onAddApp: () -> Unit) {
     val term = LocalTerm.current
     val p = term.palette
     val haptic = LocalHapticFeedback.current
@@ -379,15 +403,15 @@ private fun AppRow(apps: List<AppShortcut>, current: AppShortcut?, vm: RemoteVie
                 )
             }
         }
-        // The last entry of the list configures it: add, remove and reorder apps.
+        // The last entry of the list adds an app (managing and reordering are in Settings).
         item {
-            val label = if (apps.isEmpty()) "Add apps" else "Edit"
+            val label = "Add"
             Column(
                 Modifier
                     .width(68.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .semantics { contentDescription = "Edit app shortcuts"; role = Role.Button }
-                    .clickable(onClick = onManageApps)
+                    .semantics { contentDescription = "Add an app shortcut"; role = Role.Button }
+                    .clickable(onClick = onAddApp)
                     .padding(vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -395,7 +419,7 @@ private fun AppRow(apps: List<AppShortcut>, current: AppShortcut?, vm: RemoteVie
                 Box(
                     Modifier.size(tileSize).pane(if (term.crt) RoundedCornerShape(0.dp) else RoundedCornerShape(percent = 30)),
                     contentAlignment = Alignment.Center,
-                ) { Glyph("gear", p.dim, Modifier.size(26.dp)) }
+                ) { Glyph("plus", p.dim, Modifier.size(26.dp), strokeWidth = 2.4f) }
                 Text(
                     if (term.crt) label.uppercase() else label,
                     fontSize = 11.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
@@ -409,54 +433,65 @@ private fun AppRow(apps: List<AppShortcut>, current: AppShortcut?, vm: RemoteVie
 
 @Composable
 private fun CrtPad(vm: RemoteViewModel) {
-    val cell = 92.dp
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        RemoteButton("Up", Key.UP, vm, Modifier.size(cell), repeat = true) { Triangle("up", it) }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            RemoteButton("Left", Key.LEFT, vm, Modifier.size(cell), repeat = true) { Triangle("left", it) }
-            RemoteButton("OK", Key.CENTER, vm, Modifier.size(cell), look = Look.Action, strong = true) {
-                Text("OK", color = it, fontSize = 26.sp, fontWeight = FontWeight.Bold, style = glowStyle(it))
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val cell = minOf(92.dp, (maxHeight - 12.dp) / 3, (maxWidth - 12.dp) / 3)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            RemoteButton("Up", Key.UP, vm, Modifier.size(cell), repeat = true) { Triangle("up", it) }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                RemoteButton("Left", Key.LEFT, vm, Modifier.size(cell), repeat = true) { Triangle("left", it) }
+                RemoteButton("OK", Key.CENTER, vm, Modifier.size(cell), look = Look.Action, strong = true) {
+                    Text("OK", color = it, fontSize = 26.sp, fontWeight = FontWeight.Bold, style = glowStyle(it))
+                }
+                RemoteButton("Right", Key.RIGHT, vm, Modifier.size(cell), repeat = true) { Triangle("right", it) }
             }
-            RemoteButton("Right", Key.RIGHT, vm, Modifier.size(cell), repeat = true) { Triangle("right", it) }
+            RemoteButton("Down", Key.DOWN, vm, Modifier.size(cell), repeat = true) { Triangle("down", it) }
         }
-        RemoteButton("Down", Key.DOWN, vm, Modifier.size(cell), repeat = true) { Triangle("down", it) }
     }
 }
 
 @Composable
 private fun GlassDial(vm: RemoteViewModel) {
     val p = LocalTerm.current.palette
-    Box(
-        Modifier
-            .size(284.dp)
-            .drawBehind {
-                val r = size.minDimension / 2
-                val center = Offset(r, r)
-                // Soft glow, then the ring fading between the two accents, then the dark face.
-                drawCircle(p.action.copy(alpha = 0.10f), radius = r + 2.dp.toPx(), style = Stroke(16.dp.toPx()))
-                drawCircle(p.primary.copy(alpha = 0.10f), radius = r - 2.dp.toPx(), style = Stroke(8.dp.toPx()))
-                drawCircle(Brush.radialGradient(listOf(p.surface, p.bg), center = center, radius = r), radius = r - 2.dp.toPx())
-                drawCircle(
-                    Brush.sweepGradient(listOf(p.primary, p.action, p.primary), center = center),
-                    radius = r - 2.dp.toPx(), style = Stroke(4.dp.toPx()),
-                )
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        RemoteButton("Up", Key.UP, vm, Modifier.align(Alignment.TopCenter).padding(top = 10.dp).size(64.dp), repeat = true, ghost = true, shape = CircleShape) {
-            Glyph("up", it, Modifier.size(32.dp), 2.4f)
-        }
-        RemoteButton("Down", Key.DOWN, vm, Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp).size(64.dp), repeat = true, ghost = true, shape = CircleShape) {
-            Glyph("down", it, Modifier.size(32.dp), 2.4f)
-        }
-        RemoteButton("Left", Key.LEFT, vm, Modifier.align(Alignment.CenterStart).padding(start = 10.dp).size(64.dp), repeat = true, ghost = true, shape = CircleShape) {
-            Glyph("left", it, Modifier.size(32.dp), 2.4f)
-        }
-        RemoteButton("Right", Key.RIGHT, vm, Modifier.align(Alignment.CenterEnd).padding(end = 10.dp).size(64.dp), repeat = true, ghost = true, shape = CircleShape) {
-            Glyph("right", it, Modifier.size(32.dp), 2.4f)
-        }
-        RemoteButton("OK", Key.CENTER, vm, Modifier.size(100.dp), look = Look.Action, strong = true, shape = CircleShape) {
-            Text("OK", color = it, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // 272 dp when there is room (the glow around the ring needs a little air), smaller otherwise.
+        val dial = minOf(272.dp, maxHeight - 16.dp, maxWidth - 16.dp)
+        val s = dial / 272.dp
+        val arrow = 64.dp * s
+        val edge = 10.dp * s
+        Box(
+            Modifier
+                .size(dial)
+                .drawBehind {
+                    val r = size.minDimension / 2
+                    val center = Offset(r, r)
+                    // Soft glow, then the ring fading between the two accents, then the dark face.
+                    drawCircle(p.action.copy(alpha = 0.10f), radius = r + 2.dp.toPx(), style = Stroke(16.dp.toPx()))
+                    drawCircle(p.primary.copy(alpha = 0.10f), radius = r - 2.dp.toPx(), style = Stroke(8.dp.toPx()))
+                    drawCircle(Brush.radialGradient(listOf(p.surface, p.bg), center = center, radius = r), radius = r - 2.dp.toPx())
+                    // The ring fades between the two accents, or runs through the rainbow (Pride).
+                    val ring = p.stripes?.let { it + it.first() } ?: listOf(p.primary, p.action, p.primary)
+                    drawCircle(
+                        Brush.sweepGradient(ring, center = center),
+                        radius = r - 2.dp.toPx(), style = Stroke(4.dp.toPx()),
+                    )
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            RemoteButton("Up", Key.UP, vm, Modifier.align(Alignment.TopCenter).padding(top = edge).size(arrow), repeat = true, ghost = true, shape = CircleShape) {
+                Glyph("up", it, Modifier.size(32.dp), 2.4f)
+            }
+            RemoteButton("Down", Key.DOWN, vm, Modifier.align(Alignment.BottomCenter).padding(bottom = edge).size(arrow), repeat = true, ghost = true, shape = CircleShape) {
+                Glyph("down", it, Modifier.size(32.dp), 2.4f)
+            }
+            RemoteButton("Left", Key.LEFT, vm, Modifier.align(Alignment.CenterStart).padding(start = edge).size(arrow), repeat = true, ghost = true, shape = CircleShape) {
+                Glyph("left", it, Modifier.size(32.dp), 2.4f)
+            }
+            RemoteButton("Right", Key.RIGHT, vm, Modifier.align(Alignment.CenterEnd).padding(end = edge).size(arrow), repeat = true, ghost = true, shape = CircleShape) {
+                Glyph("right", it, Modifier.size(32.dp), 2.4f)
+            }
+            RemoteButton("OK", Key.CENTER, vm, Modifier.size(100.dp * s), look = Look.Action, strong = true, shape = CircleShape) {
+                Text("OK", color = it, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -465,21 +500,80 @@ private fun GlassDial(vm: RemoteViewModel) {
 private fun Keypad(vm: RemoteViewModel) {
     val term = LocalTerm.current
     val gap = if (term.crt) 6.dp else 8.dp
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(gap)) {
+    // Rows share the height of the page (at most 4 x 64 dp), so the pad fits whatever room there is.
+    Column(Modifier.fillMaxWidth().heightIn(max = 280.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
         for (row in 0..2) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(gap)) {
                 for (col in 0..2) {
                     val n = row * 3 + col + 1
-                    RemoteButton("Digit $n", Key.DIGIT_0 + n, vm, Modifier.weight(1f).height(60.dp)) {
+                    RemoteButton("Digit $n", Key.DIGIT_0 + n, vm, Modifier.weight(1f).fillMaxHeight()) {
                         Text("$n", color = it, fontSize = 24.sp)
                     }
                 }
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
-            RemoteButton("TV input", Key.TV, vm, Modifier.weight(1f).height(60.dp), look = Look.Primary) { Text("TV", color = it, fontSize = 20.sp) }
-            RemoteButton("Digit 0", Key.DIGIT_0, vm, Modifier.weight(1f).height(60.dp)) { Text("0", color = it, fontSize = 24.sp) }
-            RemoteButton("Menu", Key.MENU, vm, Modifier.weight(1f).height(60.dp), look = Look.Primary) { Text("MENU", color = it, fontSize = 18.sp) }
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            RemoteButton("TV input", Key.TV, vm, Modifier.weight(1f).fillMaxHeight(), look = Look.Primary) { Text("TV", color = it, fontSize = 20.sp) }
+            RemoteButton("Digit 0", Key.DIGIT_0, vm, Modifier.weight(1f).fillMaxHeight()) { Text("0", color = it, fontSize = 24.sp) }
+            RemoteButton("Menu", Key.MENU, vm, Modifier.weight(1f).fillMaxHeight(), look = Look.Primary) { Text("MENU", color = it, fontSize = 18.sp) }
+        }
+    }
+}
+
+/** The pages of the big area under the app row, in swipe order. */
+private enum class PadPage(val label: String) { Pad("Pad"), Numbers("Numbers"), More("More keys") }
+
+/** The little pager: one dot per page, the current one a longer bar. Tapping a dot goes to that page. */
+@Composable
+private fun PagerDots(state: PagerState) {
+    val term = LocalTerm.current
+    val p = term.palette
+    val scope = rememberCoroutineScope()
+    Row(Modifier.height(24.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+        PadPage.entries.forEachIndexed { index, entry ->
+            val selected = state.currentPage == index
+            val width by animateDpAsState(if (selected) 22.dp else 8.dp, label = "dot")
+            Box(
+                Modifier
+                    .size(width = 36.dp, height = 24.dp)
+                    .semantics {
+                        role = Role.Tab
+                        this.selected = selected
+                        contentDescription = "${entry.label}, page ${index + 1} of ${PadPage.entries.size}"
+                    }
+                    .clickable { scope.launch { state.animateScrollToPage(index) } },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(width = width, height = 8.dp)
+                        .background(
+                            if (selected) p.primary else p.border,
+                            if (term.crt) RoundedCornerShape(0.dp) else CircleShape,
+                        ),
+                )
+            }
+        }
+    }
+}
+
+/** Playback, TV and colour keys, and the stick's sleep/wake: five rows of four (see [MORE_KEYS]). */
+@Composable
+private fun MoreKeysPage(vm: RemoteViewModel) {
+    val gap = if (LocalTerm.current.crt) 6.dp else 8.dp
+    Column(Modifier.fillMaxWidth().heightIn(max = 290.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
+        MORE_KEYS.forEach { row ->
+            Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                row.forEach { key ->
+                    RemoteButton(key.description, key.code, vm, Modifier.weight(1f).fillMaxHeight(), repeat = key.repeat) { color ->
+                        when {
+                            key.glyph != null -> Solid(key.glyph, color, Modifier.size(24.dp))
+                            key.color != null -> Box(Modifier.size(width = 30.dp, height = 12.dp).background(key.color, RoundedCornerShape(3.dp)))
+                            else -> Text(key.label, color = color, fontSize = 13.sp, maxLines = 1)
+                        }
+                    }
+                }
+            }
         }
     }
 }

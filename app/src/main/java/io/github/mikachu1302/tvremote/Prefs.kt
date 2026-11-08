@@ -4,8 +4,18 @@ import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Which launcher icon to show: the one in the selected colours, or the Progress Pride one. */
-enum class IconChoice { Match, Pride }
+/**
+ * Which launcher icon to show: the one in the selected colours, or one of the Progress Pride ones
+ * ([iconId] is the generated icon's name, see tools/gen_launcher_icons.py).
+ */
+enum class IconChoice(val label: String, val iconId: String?) {
+    Match("Match colors", null),
+    PrideBezel("Pride bezel", "pride_bezel"),
+    PrideLight("Pride light", "pride_light"),
+    PrideRainbow("Pride rainbow", "pride_rainbow"),
+    PrideNight("Pride night", "pride_night"),
+    PrideBig("Pride big flag", "pride_big"),
+}
 
 /** The "remote behavior" options. */
 data class RemoteSettings(
@@ -106,7 +116,10 @@ fun SharedPreferences.loadSettings() = RemoteSettings(
     style = UiStyle.entries.firstOrNull { it.name == getString("style", null) } ?: UiStyle.Crt,
     palette = getString("palette", null) ?: "neon",
     scanlines = getBoolean("scanlines", true),
-    icon = IconChoice.entries.firstOrNull { it.name == getString("icon", null) } ?: IconChoice.Match,
+    // "Pride" is what 0.2.x saved before there were five Pride icons.
+    icon = getString("icon", null).let { saved ->
+        IconChoice.entries.firstOrNull { it.name == saved } ?: if (saved == "Pride") IconChoice.PrideBezel else IconChoice.Match
+    },
 )
 
 fun SharedPreferences.Editor.putSettings(s: RemoteSettings): SharedPreferences.Editor = this

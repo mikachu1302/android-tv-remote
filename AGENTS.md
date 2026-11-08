@@ -117,8 +117,9 @@ All in `app/src/main/java/io/github/mikachu1302/tvremote/`:
 - `LauncherIcon.kt` – switches the launcher icon alias to match the palette or Pride
 - `RemoteViewModel.kt` – paired TV, connection loop, TV state, voice, settings, pairing
 - `MainActivity.kt` – activity (theme, keep-awake, theater mode), screen router, find/pair screens
-- `RemoteScreen.kt` – the remote (app row, D-pad / number pad, buttons, keyboard bar, drawn icons)
-- `SettingsScreens.kt` – settings and app-shortcut manager
+- `RemoteScreen.kt` – the remote (app row, a swipeable pager of D-pad / number pad / more keys with a dot indicator, buttons, keyboard bar, drawn icons)
+- `SettingsScreens.kt` – settings, and the one app-shortcuts screen (your apps with drag-to-reorder and
+  Remove, the apps still to add, add by package name)
 
 Keep the protocol files (`Proto`, `Pairing`, `Remote`) free of UI code and well separated
 from `Tls`/`Discovery`: an iOS port would reimplement them in Swift, and the protocol
@@ -132,14 +133,18 @@ notes above plus these files are its spec.
   scaled up through the density's font scale (VT323 is drawn small), so write sizes as plain `sp`.
 - **Palettes** live in `Palettes` (`Theme.kt`): `primary` = alive (on, connected, plus/minus),
   `action` = the action (OK, the app that is open, the mic), `soft` = quiet third colour. `PaletteTest`
-  enforces contrast (text 7:1, other text 4.5:1, borders 3:1): a new palette must pass it.
-- **Launcher icons** are generated, one per palette plus Progress Pride, behind manifest aliases:
+  enforces contrast (text 7:1, other text 4.5:1, borders 3:1): a new palette must pass it. A palette may
+  carry `stripes` (Pride): shown as dots in its chip and as the dial ring in the glass style.
+- **Launcher icons** are generated, one per palette plus five Progress Pride ones (`pride_bezel`,
+  `pride_light`, `pride_rainbow`, `pride_night`, `pride_big`; `IconChoice` in `Prefs.kt`), behind manifest aliases:
   after changing a palette run `python3 tools/gen_launcher_icons.py` (`LauncherResourcesTest` fails
   when they are out of date). Android cannot recolour an icon at runtime, hence the aliases.
 - **App logos:** `AppLogos.kt` holds shapes from the Simple Icons collection (CC0, simpleicons.org);
   the brands are trademarks of their owners and the shapes only say which app a tile opens. Apps
   without a logo get an initials tile. Don't draw imitation logos.
 - **Fonts:** VT323 and Fira Code (SIL OFL, licences in `licenses/`).
+- Lists never change on a row tap: only explicit buttons (Add, Remove, the drag handle) do. Apps already in the
+  list are not offered again under "Add apps". Reordering is by drag handle, plus "Move up/down" accessibility actions.
 - Long explanations go behind a small "i" (`InfoButton`), not into the list: settings titles stay
   on one line. Cards side by side have equal height (`IntrinsicSize.Max` + `fillMaxHeight`).
 
@@ -148,6 +153,9 @@ notes above plus these files are its spec.
 - UI text is English and short. Colour is never the only signal – add an icon, label or
   text. Buttons are large and reachable with a thumb; every button has a content
   description for TalkBack. Pressing a button gives haptic feedback.
+- **The remote fits the screen without scrolling:** the pad pager takes the height the rest leaves (pads scale to it);
+  only a window under 640 dp falls back to scrolling. Buttons on the pager's pages (`LocalSwipeable`) wait ~100 ms before
+  sending, so a swipe that starts on a key sends nothing; a quick tap goes out as one short press.
 - Holding volume, channel or a D-pad direction holds the key on the TV (`START_LONG` on
   press, `END_LONG` on release – never leave a key held: the release runs in a `finally`);
   with "smooth press" off it repeats a short press (~150 ms after ~400 ms). Other buttons
@@ -156,6 +164,8 @@ notes above plus these files are its spec.
   (`play.google.com/store/apps/details?id=<package>` must answer 200 with the right title)
   before adding it; don't add one from memory. The picker also offers the app that is open
   on the TV (any package works through `market://launch?id=`), so a missing app is never a dead end.
+- Art in launcher icons must stay inside the part the launcher shows (the generator scales it to ~0.72;
+  `LauncherResourcesTest` checks). Settings previews draw the real adaptive icon through the device's mask.
 - Icons are drawn from path data (`Icons.kt`): fonts on phones lack many symbols (⏻ and ✓ showed as
   boxes or odd glyphs).
 - Connection problems show a plain message and a retry – never a crash or a silent

@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
@@ -37,6 +38,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 val LocalSettings = staticCompositionLocalOf { RemoteSettings() }
+
+/** True for buttons that sit on a page the user swipes sideways (see [RemoteButton]). */
+val LocalSwipeable = staticCompositionLocalOf { false }
+
+/** How long a touch on a swipeable page waits to see whether it becomes a swipe. */
+private const val SWIPE_WINDOW_MS = 100L
+
+private class Released(val up: PointerInputChange?)
 
 /** Which colour a key speaks in: plain, "alive" (plus/minus, play) or the action colour (OK, mic). */
 enum class Look { Normal, Primary, Action }
@@ -72,6 +81,7 @@ fun RemoteButton(
     val haptic = LocalHapticFeedback.current
     val settings = LocalSettings.current
     val scope = rememberCoroutineScope()
+    val swipeable = LocalSwipeable.current
     var pressed by remember { mutableStateOf(false) }
 
     val keyShape = shape ?: term.controlShape
@@ -112,15 +122,26 @@ fun RemoteButton(
                 contentDescription = description
                 role = Role.Button
             }
-            .pointerInput(keyCode, repeat, settings.smoothPress, settings.haptics) {
+            .pointerInput(keyCode, repeat, settings.smoothPress, settings.haptics, swipeable) {
                 awaitEachGesture {
                     awaitFirstDown()
                     pressed = true
+                    // On a swipeable page the touch may be a swipe to the next page: wait briefly. If the
+                    // pager takes the touch over, nothing is sent; a quick tap is sent as one short press.
+                    var released: PointerInputChange? = null
+                    if (swipeable) {
+                        val early = withTimeoutOrNull(SWIPE_WINDOW_MS) { Released(waitForUpOrCancellation()) }
+                        if (early != null && early.up == null) {
+                            pressed = false
+                            return@awaitEachGesture
+                        }
+                        released = early?.up
+                    }
                     if (settings.haptics) haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
                     onDown?.invoke()
-                    val smooth = repeat && keyCode != null && settings.smoothPress
+                    val smooth = repeat && keyCode != null && settings.smoothPress && released == null
                     if (keyCode != null) vm.press(keyCode, if (smooth) Direction.StartLong else Direction.Short)
-                    val ticker = if (repeat && keyCode != null && !smooth) scope.launch {
+                    val ticker = if (repeat && keyCode != null && !smooth && released == null) scope.launch {
                         delay(400)
                         while (true) {
                             vm.press(keyCode)
@@ -128,7 +149,7 @@ fun RemoteButton(
                         }
                     } else null
                     try {
-                        val up = waitForUpOrCancellation()
+                        val up = released ?: waitForUpOrCancellation()
                         if (up != null) onClick?.invoke()
                     } finally {
                         // Also runs when the button leaves the screen mid-press: never leave a key held down.

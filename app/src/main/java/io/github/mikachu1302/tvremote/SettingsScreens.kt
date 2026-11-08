@@ -1,19 +1,33 @@
 package io.github.mikachu1302.tvremote
 
 import androidx.compose.foundation.layout.Arrangement
+import kotlin.math.roundToInt
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.key
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.contentDescription
@@ -45,7 +59,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -199,57 +215,12 @@ private fun SwitchRow(title: String, info: String, checked: Boolean, onChange: (
     }
 }
 
+/**
+ * Everything about the app row in one place: your apps (drag to reorder, remove) and the apps to add.
+ * A row in the lists does nothing when tapped; only its buttons change anything.
+ */
 @Composable
-fun ManageAppsScreen(vm: RemoteViewModel, onBack: () -> Unit, onAdd: () -> Unit) {
-    val apps by vm.apps.collectAsStateWithLifecycle()
-
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            BackButton(onBack)
-            Text("App shortcuts", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        }
-        Text(
-            "Order of the app tiles.",
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp),
-        )
-
-        apps.forEachIndexed { i, app ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                AppTile(app.name, Modifier.size(40.dp))
-                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    Text(app.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    // The link is only interesting for shortcuts that are not from the list.
-                    if (CATALOG.none { it.link == app.link }) {
-                        Text(
-                            app.link, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                CompactButton("↑", enabled = i > 0) { vm.moveApp(i, -1) }
-                CompactButton("↓", enabled = i < apps.lastIndex) { vm.moveApp(i, 1) }
-                CompactButton("Remove") { vm.removeApp(i) }
-            }
-        }
-
-        Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            TButton(onClick = onAdd, modifier = Modifier.fillMaxWidth()) { Text("Add apps…") }
-            TTextButton(onClick = vm::resetApps, modifier = Modifier.fillMaxWidth()) { Text("Reset to defaults") }
-        }
-    }
-}
-
-@Composable
-private fun CompactButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
-    TTextButton(
-        onClick = onClick, enabled = enabled,
-        contentPadding = PaddingValues(horizontal = 8.dp), modifier = Modifier.defaultMinSize(minWidth = 1.dp),
-    ) { Text(text, fontSize = 14.sp) }
-}
-
-/** Pick apps from a list, like the app this replaces. Tap a row to add it; tap again to remove it. */
-@Composable
-fun AppPickerScreen(vm: RemoteViewModel, onBack: () -> Unit) {
+fun AppShortcutsScreen(vm: RemoteViewModel, onBack: () -> Unit) {
     val apps by vm.apps.collectAsStateWithLifecycle()
     val state by vm.tvState.collectAsStateWithLifecycle()
     var custom by remember { mutableStateOf(false) }
@@ -257,29 +228,36 @@ fun AppPickerScreen(vm: RemoteViewModel, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             BackButton(onBack)
-            Text("Add apps", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("App shortcuts", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }
 
-        // Whatever is open on the TV right now: works for apps that are not in the list.
-        val pkg = state.appPackage
-        if (pkg != null) {
-            val open = shortcutForPackage(pkg, state.appLabel)
-            PickerSection("Open on your TV now")
-            PickerRow(open, added = apps.any { it.link == open.link }, subtitle = "Currently open") { vm.toggleApp(open) }
+        PickerSection("Your apps (${apps.size})")
+        if (apps.isEmpty()) {
+            Text("None yet. Add some below.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            Text(
-                "Open an app on the TV and it shows up here.",
-                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
-            )
+            Text("Drag the handle to reorder.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
+            ReorderableApps(apps, vm)
         }
 
-        PickerSection("Apps")
-        CATALOG.forEach { app ->
-            PickerRow(app, added = apps.any { it.link == app.link }) { vm.toggleApp(app) }
+        // Apps already in your list are not offered again: they are above, with their Remove button.
+        // Whatever is open on the TV right now is offered too, even when it is not in the catalog.
+        val pkg = state.appPackage
+        val open = pkg?.let { shortcutForPackage(it, state.appLabel) }
+        if (open != null && apps.none { it.link == open.link }) {
+            PickerSection("Open on your TV now")
+            CatalogRow(open, subtitle = "Currently open") { vm.addApp(open) }
         }
+
+        PickerSection("Add apps")
+        val available = CATALOG.filter { entry -> apps.none { it.link == entry.link } }
+        if (available.isEmpty()) {
+            Text("All apps are in your list.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        available.forEach { app -> CatalogRow(app, subtitle = null) { vm.addApp(app) } }
 
         PickerSection("Something else")
         TOutlinedButton(onClick = { custom = true }, modifier = Modifier.fillMaxWidth()) { Text("Add by package name or link…") }
+        TTextButton(onClick = vm::resetApps, modifier = Modifier.fillMaxWidth()) { Text("Reset to defaults") }
     }
 
     if (custom) {
@@ -290,10 +268,7 @@ fun AppPickerScreen(vm: RemoteViewModel, onBack: () -> Unit) {
             title = { Text("Add by package name") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "A package name like com.netflix.ninja, or a web link.",
-                        fontSize = 13.sp,
-                    )
+                    Text("A package name like com.netflix.ninja, or a web link.", fontSize = 13.sp)
                     OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
                     OutlinedTextField(link, { link = it.trim() }, label = { Text("Package name or link") }, singleLine = true)
                 }
@@ -312,35 +287,110 @@ fun AppPickerScreen(vm: RemoteViewModel, onBack: () -> Unit) {
     }
 }
 
+/**
+ * The app list with drag handles: hold and drag a handle past its neighbours to move the app. Rows are
+ * keyed by link, so the dragged row keeps its gesture while the list reorders under it. For TalkBack
+ * each row offers "Move up" and "Move down" instead.
+ */
+@Composable
+private fun ReorderableApps(apps: List<AppShortcut>, vm: RemoteViewModel) {
+    val colors = MaterialTheme.colorScheme
+    val shape = LocalTerm.current.controlShape
+    val rowHeight = 64.dp
+    val rowPx = with(LocalDensity.current) { rowHeight.toPx() }
+    var dragging by remember { mutableStateOf<String?>(null) }
+    var offset by remember { mutableFloatStateOf(0f) }
+    val lastIndex by rememberUpdatedState(apps.lastIndex)
+
+    Column {
+        apps.forEachIndexed { index, app ->
+            key(app.link) {
+                val current by rememberUpdatedState(index)
+                val isDragging = dragging == app.link
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(rowHeight)
+                        .zIndex(if (isDragging) 1f else 0f)
+                        .offset { IntOffset(0, if (isDragging) offset.roundToInt() else 0) }
+                        .then(if (isDragging) Modifier.background(colors.surfaceVariant, shape).border(1.dp, colors.primary, shape) else Modifier)
+                        .semantics {
+                            customActions = listOf(
+                                CustomAccessibilityAction("Move up") { vm.moveApp(current, -1); true },
+                                CustomAccessibilityAction("Move down") { vm.moveApp(current, 1); true },
+                            )
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier
+                            .size(48.dp)
+                            .semantics { contentDescription = "Reorder ${app.name}" }
+                            .pointerInput(app.link) {
+                                detectDragGestures(
+                                    onDragStart = {
+                                        dragging = app.link
+                                        offset = 0f
+                                    },
+                                    onDrag = { change, drag ->
+                                        change.consume()
+                                        offset += drag.y
+                                        val target = (current + (offset / rowPx).roundToInt()).coerceIn(0, lastIndex)
+                                        if (target != current) {
+                                            vm.moveApp(current, target - current)
+                                            offset -= (target - current) * rowPx
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        dragging = null
+                                        offset = 0f
+                                    },
+                                    onDragCancel = {
+                                        dragging = null
+                                        offset = 0f
+                                    },
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) { Glyph("grip", colors.onSurfaceVariant, Modifier.size(22.dp)) }
+                    AppTile(app.name, Modifier.size(40.dp))
+                    Text(
+                        app.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                    )
+                    TTextButton(
+                        onClick = { vm.removeApp(current) },
+                        contentPadding = PaddingValues(horizontal = 10.dp),
+                        modifier = Modifier.semantics { contentDescription = "Remove ${app.name}" },
+                    ) { Text("Remove", fontSize = 14.sp) }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun PickerSection(title: String) {
     Text(
         title, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+        modifier = Modifier.padding(top = 18.dp, bottom = 6.dp),
     )
 }
 
+/** An app that can be added. Only the button does anything: tapping the row does nothing. */
 @Composable
-private fun PickerRow(app: AppShortcut, added: Boolean, subtitle: String? = null, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .semantics { contentDescription = (if (added) "Remove " else "Add ") + app.name; role = Role.Button }
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+private fun CatalogRow(app: AppShortcut, subtitle: String?, onAdd: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         AppTile(app.name, Modifier.size(40.dp))
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(app.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = colors.onSurfaceVariant)
         }
-        // Text as well as colour: "Added" or "Add".
-        Text(
-            if (added) "✓ Added" else "Add", fontSize = 14.sp, fontWeight = FontWeight.Medium,
-            color = if (added) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
-        )
+        TOutlinedButton(
+            onClick = onAdd,
+            modifier = Modifier.widthIn(min = 96.dp).semantics { contentDescription = "Add ${app.name}" },
+        ) { Text("Add") }
     }
 }
 
@@ -397,12 +447,14 @@ private fun AppearanceSection(settings: RemoteSettings, vm: RemoteViewModel) {
         "App icon",
         info = "The launcher icon changes a moment after you choose. Your launcher may move it, or briefly show a blank spot on the home screen.",
     )
-    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        IconOption("Match colors", Palettes.byId(settings.palette).id, settings.icon == IconChoice.Match, Modifier.weight(1f).fillMaxHeight()) {
-            vm.updateSettings { it.copy(icon = IconChoice.Match) }
-        }
-        IconOption("Pride", "pride", settings.icon == IconChoice.Pride, Modifier.weight(1f).fillMaxHeight()) {
-            vm.updateSettings { it.copy(icon = IconChoice.Pride) }
+    IconChoice.entries.chunked(3).forEach { row ->
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Max).padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            row.forEach { choice ->
+                IconOption(
+                    choice.label, choice.iconId ?: Palettes.byId(settings.palette).id, settings.icon == choice,
+                    Modifier.weight(1f).fillMaxHeight(),
+                ) { vm.updateSettings { it.copy(icon = choice) } }
+            }
         }
     }
 }
@@ -421,10 +473,10 @@ private fun PaletteChip(palette: Palette, selected: Boolean, modifier: Modifier,
     ) {
         Column(Modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 30.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(palette.name, color = palette.text, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(palette.primary, palette.action, palette.soft, palette.text).forEach {
-                    Box(Modifier.size(18.dp).background(it, CircleShape))
-                }
+            // Pride shows its six stripes, the others their four main colours.
+            val dots = palette.stripes ?: listOf(palette.primary, palette.action, palette.soft, palette.text)
+            Row(horizontalArrangement = Arrangement.spacedBy(if (dots.size > 4) 4.dp else 6.dp)) {
+                dots.forEach { Box(Modifier.size(if (dots.size > 4) 16.dp else 18.dp).background(it, CircleShape)) }
             }
         }
         if (selected) SelectedMark(Modifier.align(Alignment.TopEnd), palette.primary)
@@ -449,25 +501,38 @@ private fun IconOption(label: String, iconId: String, selected: Boolean, modifie
             .clickable(onClick = onClick),
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(12.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            LauncherPreview(iconId, Modifier.size(72.dp))
-            Text(label, fontWeight = FontWeight.Medium, color = if (selected) colors.primary else colors.onSurface, maxLines = 1)
+            LauncherPreview(iconId, Modifier.size(64.dp))
+            Text(
+                label, fontSize = 12.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 2,
+                color = if (selected) colors.primary else colors.onSurface,
+            )
         }
         if (selected) SelectedMark(Modifier.align(Alignment.TopEnd))
     }
 }
 
-/** The real launcher icon (foreground drawable on its background colour), as the launcher shows it. */
+/**
+ * The real launcher icon, drawn as an adaptive icon through the device's own mask: what you see here
+ * is what the home screen shows (including what the mask cuts off).
+ */
 @Composable
 private fun LauncherPreview(iconId: String, modifier: Modifier) {
-    val context = LocalContext.current
-    val resId = remember(iconId) { context.resources.getIdentifier("ic_launcher_fg_$iconId", "drawable", context.packageName) }
-    val bg = if (iconId == "pride") Color(0xFF0E0E14) else Palettes.byId(iconId).bg
-    Box(modifier.clip(RoundedCornerShape(percent = 28)).background(bg)) {
-        if (resId != 0) Image(painterResource(resId), contentDescription = null, modifier = Modifier.fillMaxSize())
+    val resources = LocalResources.current
+    val theme = LocalContext.current.theme
+    val packageName = LocalContext.current.packageName
+    val drawable = remember(iconId, resources) {
+        val id = resources.getIdentifier("ic_launcher_$iconId", "mipmap", packageName)
+        if (id == 0) null else resources.getDrawable(id, theme)?.mutate()
+    }
+    Canvas(modifier) {
+        drawable?.let { d ->
+            d.setBounds(0, 0, size.width.toInt(), size.height.toInt())
+            drawIntoCanvas { d.draw(it.nativeCanvas) }
+        }
     }
 }
 

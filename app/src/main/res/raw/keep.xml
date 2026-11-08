@@ -2,4 +2,4 @@
 <!-- Settings looks the launcher icon previews up by name (getIdentifier): keep them when shrinking. -->
 <resources
     xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@drawable/ic_launcher_fg_*,@mipmap/ic_launcher_*,@color/ic_launcher_bg_*" />
+    tools:keep="@drawable/ic_launcher_fg_*,@drawable/ic_launcher_bg_*,@mipmap/ic_launcher_*,@color/ic_launcher_bg_*" />

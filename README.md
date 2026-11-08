@@ -10,12 +10,12 @@ uses – over your local network.
 - Keyboard: type on the phone, it appears in the TV's text field (opens by itself when a
   text field gets focus)
 - Voice search: hold the mic button
-- App shortcuts row: pick apps from a list (streaming, German TV libraries, music, Kodi, VLC …),
-  add the app that is open on the TV with one tap, or enter a package name
+- App shortcuts row: the last tile (+) adds apps from a list (streaming, German TV libraries, music, Kodi, VLC …),
+  the app that is open on the TV, or any package name; drag to reorder, tap Remove to take one out
 - Holding a button acts like holding it on a physical remote
 - Reconnects by itself (also after the screen locked or the TV's address changed)
-- Two looks (Neon CRT and Glass) and nine colour palettes, all switchable in Settings;
-  the launcher icon follows the colours, or shows the Progress Pride flag
+- Two looks (Neon CRT and Glass) and ten colour palettes (one inspired by the Progress Pride flag),
+  all switchable in Settings; the launcher icon follows the colours, or is one of five Pride icons
 - Settings: haptics, smooth press, keep screen awake, theater mode
 - No ads, no tracking, no accounts; talks only to your TV
 
@@ -27,7 +27,7 @@ keystore.
 ```
 ./gradlew assembleDebug        # debug build, installs as "TV Remote (debug)"
 ./tools/release.sh             # signed release APK in build/release/ (creates a signing key on first run)
-adb install -r build/release/tv-remote-0.2.0.apk
+adb install -r build/release/tv-remote-0.3.0.apk
 ```
 
 Requires the Android SDK (platform 37) and a JDK. See `AGENTS.md` for details.

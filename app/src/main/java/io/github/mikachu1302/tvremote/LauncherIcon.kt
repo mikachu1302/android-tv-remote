@@ -13,12 +13,15 @@ object LauncherIcon {
     private const val NAMESPACE = "io.github.mikachu1302.tvremote"
     private const val DEFAULT_ALIAS = "LauncherNeon"
 
-    fun aliasName(id: String) = "Launcher" + id.replaceFirstChar { it.uppercase() }
+    /** "pride_bezel" -> "LauncherPrideBezel" (the alias names in the manifest). */
+    fun aliasName(id: String) = "Launcher" + id.split('_').joinToString("") { it.replaceFirstChar { c -> c.uppercase() } }
 
-    fun aliasFor(settings: RemoteSettings): String =
-        aliasName(if (settings.icon == IconChoice.Pride) "pride" else Palettes.byId(settings.palette).id)
+    /** The generated icon's id for [settings]: a Pride icon, or the one of the selected palette. */
+    fun iconId(settings: RemoteSettings): String = settings.icon.iconId ?: Palettes.byId(settings.palette).id
 
-    private val all = Palettes.all.map { aliasName(it.id) } + aliasName("pride")
+    fun aliasFor(settings: RemoteSettings): String = aliasName(iconId(settings))
+
+    private val all = Palettes.all.map { aliasName(it.id) } + IconChoice.entries.mapNotNull { it.iconId }.map(::aliasName)
 
     /** Makes the alias for [settings] the only enabled one. Does nothing when it already is. */
     fun apply(context: Context, settings: RemoteSettings) {

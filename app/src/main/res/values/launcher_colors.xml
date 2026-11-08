@@ -9,5 +9,9 @@
     <color name="ic_launcher_bg_nord">#2E3440</color>
     <color name="ic_launcher_bg_amber">#0C0A05</color>
     <color name="ic_launcher_bg_matrix">#020A04</color>
-    <color name="ic_launcher_bg_pride">#0E0E14</color>
+    <color name="ic_launcher_bg_pride">#100E17</color>
+    <color name="ic_launcher_bg_pride_bezel">#17161F</color>
+    <color name="ic_launcher_bg_pride_light">#F3F2F8</color>
+    <color name="ic_launcher_bg_pride_rainbow">#14131C</color>
+    <color name="ic_launcher_bg_pride_big">#17161F</color>
 </resources>
