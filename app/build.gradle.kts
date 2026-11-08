@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.mikachu1302.tvremote"
         minSdk = 31
         targetSdk = 37
-        versionCode = 8
-        versionName = "0.4.1"
+        versionCode = 9
+        versionName = "0.4.2"
     }
 
     buildTypes {

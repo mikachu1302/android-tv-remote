@@ -1,6 +1,5 @@
 package io.github.mikachu1302.tvremote
 
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -48,30 +47,10 @@ class TvAudioTest {
     }
 
     @Test
-    fun macAddressesParseInCommonSpellings() {
-        val expected = byteArrayOf(0x02, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E)
-        assertArrayEquals(expected, Wol.parseMac("02:1a:2b:3c:4d:5e"))
-        assertArrayEquals(expected, Wol.parseMac("02-1A-2B-3C-4D-5E"))
-        assertArrayEquals(expected, Wol.parseMac("021a2b3c4d5e"))
-        assertNull(Wol.parseMac("02:1a:2b:3c:4d"))
-        assertNull(Wol.parseMac("02:1a:2b:3c:4d:5g"))
-        assertNull(Wol.parseMac(""))
-    }
-
-    @Test
-    fun magicPacketIsSixFFsAndSixteenCopies() {
-        val mac = byteArrayOf(1, 2, 3, 4, 5, 6)
-        val packet = Wol.packet(mac)
-        assertEquals(102, packet.size)
-        assertTrue(packet.take(6).all { it == 0xFF.toByte() })
-        repeat(16) { assertArrayEquals(mac, packet.copyOfRange(6 + it * 6, 12 + it * 6)) }
-    }
-
-    @Test
-    fun savedTvKeepsItsWakeAddress() {
-        val tv = AudioTv("Test", "192.0.2.7", 38400, "/ctl/rc", mac = "02:1a:2b:3c:4d:5e")
+    fun savedTvRoundTrips() {
+        val tv = AudioTv("Test", "192.0.2.7", 38400, "/ctl/rc")
         assertEquals(tv, parseAudioTv(audioTvToJson(tv)))
-        val without = tv.copy(mac = null)
-        assertEquals(without, parseAudioTv(audioTvToJson(without)))
+        // An entry saved by 0.4.0 also carries a wake address: it is ignored.
+        assertEquals(tv, parseAudioTv("""{"name":"Test","host":"192.0.2.7","port":38400,"control":"/ctl/rc","mac":"02:1a:2b:3c:4d:5e"}"""))
     }
 }

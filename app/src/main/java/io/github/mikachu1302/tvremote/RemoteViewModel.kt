@@ -309,20 +309,6 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().apply { if (tv == null) remove("audioTv") else putString("audioTv", audioTvToJson(tv)) }.apply()
     }
 
-    /** Sets the TV's MAC address for Wake-on-LAN; an empty text clears it. */
-    fun setWakeAddress(text: String) {
-        val tv = _audioTv.value ?: return
-        setAudioTv(tv.copy(mac = text.trim().ifEmpty { null }))
-    }
-
-    /** Switches the TV on from standby with a Wake-on-LAN packet. False when there is no address to wake. */
-    fun wakeTv(): Boolean {
-        val tv = _audioTv.value
-        val mac = tv?.mac?.let(Wol::parseMac) ?: return false
-        viewModelScope.launch(Dispatchers.IO) { Wol.send(mac, tv.host) }
-        return true
-    }
-
     /** The user edited the keyboard field from [old] to [new]; mirror that on the TV. */
     fun typed(old: String, new: String) {
         val edit = textEdit(old, new)

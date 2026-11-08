@@ -3,9 +3,6 @@ package io.github.mikachu1302.tvremote
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 
@@ -16,11 +13,8 @@ import java.net.Socket
  * No UI types here, like the other protocol files.
  */
 
-/**
- * A TV's renderer: where its RenderingControl listens ([control] is the path of its control URL).
- * [mac] is the address for Wake-on-LAN, typed in by the user (a UPnP description does not carry it).
- */
-data class AudioTv(val name: String, val host: String, val port: Int, val control: String, val mac: String? = null)
+/** A TV's renderer: where its RenderingControl listens ([control] is the path of its control URL). */
+data class AudioTv(val name: String, val host: String, val port: Int, val control: String)
 
 data class TvAudio(val level: Int, val muted: Boolean)
 
@@ -142,36 +136,4 @@ class AudioClient(private val tv: AudioTv) {
     fun setVolume(level: Int) { call("SetVolume", "$master<DesiredVolume>${level.coerceIn(0, 100)}</DesiredVolume>") }
 
     fun setMute(on: Boolean) { call("SetMute", "$master<DesiredMute>${if (on) 1 else 0}</DesiredMute>") }
-}
-
-/** Wake-on-LAN: a "magic packet" the TV's network chip listens for while the TV is in standby. */
-object Wol {
-    /** 6 bytes from "AA:BB:CC:DD:EE:FF" (also with dashes or spaces), or null when it is not a MAC address. */
-    fun parseMac(text: String): ByteArray? {
-        val hex = text.filter { it != ':' && it != '-' && it != ' ' }
-        if (hex.length != 12 || !hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
-        return ByteArray(6) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
-    }
-
-    /** 6 x 0xFF, then the address 16 times. */
-    fun packet(mac: ByteArray): ByteArray = ByteArray(6) { 0xFF.toByte() } + ByteArray(96) { mac[it % 6] }
-
-    /** Broadcasts the packet, and sends it to the TV's last known address too (some routers drop broadcasts). */
-    fun send(mac: ByteArray, lastHost: String?) {
-        val data = packet(mac)
-        DatagramSocket().use { socket ->
-            socket.broadcast = true
-            val targets = buildList {
-                add("255.255.255.255")
-                if (lastHost != null) add(lastHost)
-            }
-            for (target in targets) for (port in intArrayOf(9, 7)) {
-                try {
-                    socket.send(DatagramPacket(data, data.size, InetAddress.getByName(target), port))
-                } catch (e: IOException) {
-                    // Try the next target: one unreachable address must not stop the others.
-                }
-            }
-        }
-    }
 }
