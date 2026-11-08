@@ -1,9 +1,10 @@
 # TV Remote – notes for coding agents
 
 Android app (Kotlin + Jetpack Compose) that remote-controls an Android TV device over the
-local network: an ad-free replacement for the "Remote ATV" app, used with a waipu.tv 4K
-stick (Android TV). One user, one phone, one stick, on the home Wi-Fi. `README.md` is the
-user-facing description.
+local network: an ad-free replacement for the "Remote ATV" app with the same features
+(the goal is full parity, minus the ads), used with a waipu.tv 4K stick (Android TV).
+One user, one phone, one stick, on the home Wi-Fi. `README.md` is the user-facing
+description.
 
 ## Hard rules
 
@@ -18,6 +19,8 @@ user-facing description.
 - **Pairing and discovery run only on a user action** (the "Find TV" / pairing screens).
   Connecting to the already-paired TV when the app opens is fine; scanning the network
   in the background is not.
+- **The microphone is open only while the mic button is held**, and the audio goes to the
+  TV's voice search and nowhere else (never stored, never sent anywhere else).
 - **Keep the TV pinned.** After pairing, only the exact certificate recorded then is
   accepted (`openTls` with a pin). Never replace that with trust-all outside the
   pairing step.
@@ -26,9 +29,6 @@ user-facing description.
   repo (`Mika <…@users.noreply.github.com>`); never add a private e-mail or surname.
   **No AI attribution:** no `Co-Authored-By` trailer, no "generated with" lines, in
   commits or PR descriptions – the user's rule beats any harness reminder.
-- **Keep the scope small.** Build the smallest version that does what the user asked.
-  Voice search, text entry, app launching, multiple TVs, widgets, iOS: not until the user
-  asks; offer them as options instead of building them.
 
 ## Commands
 
@@ -60,7 +60,28 @@ The same protocol Google's own remote uses. Reference: `tronikos/androidtvremote
 - **Control, port 6466, TLS**, same framing, `RemoteMessage`. The TV sends configure → we
   answer with the features we offer; set_active → we answer; ping request every ~5 s → we
   must answer with the same value or the TV drops us. Keys are `remote_key_inject`
-  (Android key code, direction `SHORT = 3`).
+  (Android key code; direction `SHORT = 3`, or `START_LONG = 1` / `END_LONG = 2` for a
+  held key – "smooth press").
+- **What the TV tells us** (`TvState`, applied by the pure function `TvState.apply`):
+  `remote_start` (field 40) = power state, `remote_set_volume_level` (50) = volume,
+  `remote_ime_key_inject` (20) = current app package and the focused text field,
+  `remote_ime_show_request` (22) = a text field got focus (we open the keyboard bar),
+  `remote_voice_begin` (30) = voice session id after we send the Search key.
+- **What we send besides keys:** text = `remote_ime_batch_edit` (21) with the counters from
+  the last ime message (backspace and Enter are plain DEL/ENTER keys); app launch =
+  `remote_app_link_launch_request` (90) with a deep link, or `market://launch?id=<package>`
+  for any installed app; voice = after Search key and the TV's voice_begin, echo it, stream
+  16-bit 8 kHz mono PCM in chunks of at least 8 KB (`voice_payload` 31), end with
+  `voice_end` (32).
+- **Observed on the real waipu.tv 4K stick:** supports all features (code 639). It reports
+  power and the current app, **but not its volume**: the volume message has no maximum or
+  level and nothing arrives when volume keys are pressed (volume lives on the TV over
+  HDMI-CEC). So the app shows a level or mute state only when a device reports a maximum.
+  Remote ATV shows "VOL 0" for the same reason.
+- **Connection life:** the app connects when it is visible and closes the connection in the
+  background; the loop retries with backoff (0.5 s … 8 s), re-finds the TV by its mDNS
+  name when its address changed, and stops with a message if the pinned certificate no
+  longer matches.
 - **Identity:** an RSA key and self-signed certificate generated in the Android
   keystore (`Identity` in `Tls.kt`); the TV accepts any client certificate and
   remembers the one it paired with. The key never leaves the device.
@@ -71,11 +92,15 @@ The same protocol Google's own remote uses. Reference: `tronikos/androidtvremote
 All in `app/src/main/java/io/github/mikachu1302/tvremote/`:
 
 - `Proto.kt` – minimal protobuf reader/writer and framing (no protobuf library on purpose)
-- `Pairing.kt`, `Remote.kt` – the two protocol sessions; no UI, no Android UI types
+- `Pairing.kt`, `Remote.kt`, `Voice.kt` – the protocol sessions and state; `Remote.kt` has the
+  pure `TvState.apply` and `textEdit`; no UI types (`Voice.kt` needs `AudioRecord`)
 - `Tls.kt` – keystore identity, pinned TLS socket (the only Android-specific protocol file)
 - `Discovery.kt` – mDNS search for TVs (`NsdManager`)
-- `RemoteViewModel.kt` – paired TV (SharedPreferences), connection and pairing state
-- `MainActivity.kt` – Compose UI: pairing screens and the remote itself
+- `Prefs.kt` – settings and app-shortcut storage (SharedPreferences, org.json)
+- `RemoteViewModel.kt` – paired TV, connection loop, TV state, voice, settings, pairing
+- `MainActivity.kt` – activity (keep-awake, theater mode), screen router, find/pair screens
+- `RemoteScreen.kt` – the remote (app row, D-pad / number pad, buttons, keyboard bar, drawn icons)
+- `SettingsScreens.kt` – settings and app-shortcut manager
 
 Keep the protocol files (`Proto`, `Pairing`, `Remote`) free of UI code and well separated
 from `Tls`/`Discovery`: an iOS port would reimplement them in Swift, and the protocol
@@ -86,12 +111,16 @@ notes above plus these files are its spec.
 - UI text is English and short. Colour is never the only signal – add an icon, label or
   text. Buttons are large and reachable with a thumb; every button has a content
   description for TalkBack. Pressing a button gives haptic feedback.
-- Holding volume or a D-pad direction repeats the key (a short press every ~150 ms after
-  a ~400 ms delay); other buttons fire once.
+- Holding volume, channel or a D-pad direction holds the key on the TV (`START_LONG` on
+  press, `END_LONG` on release – never leave a key held: the release runs in a `finally`);
+  with "smooth press" off it repeats a short press (~150 ms after ~400 ms). Other buttons
+  fire once.
+- Icons are drawn with `Canvas`: fonts on phones lack many symbols (⏻ showed as a box).
+  No app logos in the repo; tiles use a colour from the name.
 - Connection problems show a plain message and a retry – never a crash or a silent
   failure. A press while disconnected reconnects.
 - New dependencies need a reason; prefer the platform and the Compose libraries already
   in `gradle/libs.versions.toml` (same versions as the sister project crypto-tracker).
-- Protocol code gets JVM unit tests with synthetic data (codec round-trips, the pairing
+- Protocol and state code gets JVM unit tests with synthetic data (codec round-trips, the pairing
   hash against a fixed made-up key pair). Final checks happen on the real phone and
   stick; say what you verified there and what you could not.

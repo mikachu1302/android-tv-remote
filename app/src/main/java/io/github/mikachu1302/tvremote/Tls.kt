@@ -81,7 +81,7 @@ fun openTls(host: String, port: Int, pin: String?, timeoutMs: Int = 5000): SSLSo
         override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
             val cert = chain?.firstOrNull() ?: throw CertificateException("no certificate")
             if (pin != null && sha256Hex(cert.encoded) != pin) {
-                throw CertificateException("TV certificate changed - pair again")
+                throw PinMismatchException("TV certificate changed - pair again")
             }
         }
         override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()

@@ -42,10 +42,31 @@ class PbWriter {
 }
 
 /** A parsed message: every field number maps to the values seen for it. */
-class PbMessage(private val fields: Map<Int, List<Any>>) {
+class PbMessage(val fields: Map<Int, List<Any>>) {
     fun has(field: Int) = fields.containsKey(field)
     fun long(field: Int, default: Long = 0): Long = (fields[field]?.firstOrNull() as? Long) ?: default
+    fun string(field: Int, default: String = ""): String =
+        (fields[field]?.firstOrNull() as? ByteArray)?.toString(Charsets.UTF_8) ?: default
     fun message(field: Int): PbMessage? = (fields[field]?.firstOrNull() as? ByteArray)?.let(::parsePb)
+
+    /** One-line dump for debug logs: field numbers with values, nested messages in braces. */
+    fun describe(depth: Int = 0): String = fields.entries.joinToString(" ", "{", "}") { (field, values) ->
+        values.joinToString(",") { v ->
+            when (v) {
+                is Long -> "$field=$v"
+                is ByteArray -> "$field=" + describeBytes(v, depth)
+                else -> "$field=?"
+            }
+        }
+    }
+
+    private fun describeBytes(bytes: ByteArray, depth: Int): String {
+        if (bytes.isEmpty()) return "{}"
+        val text = bytes.toString(Charsets.UTF_8)
+        if (text.all { it >= ' ' && it != '\uFFFD' }) return "\"" + text.take(60) + "\""
+        return runCatching { if (depth < 4) parsePb(bytes).describe(depth + 1) else "bytes[${bytes.size}]" }
+            .getOrDefault("bytes[${bytes.size}]")
+    }
 }
 
 fun parsePb(data: ByteArray): PbMessage {

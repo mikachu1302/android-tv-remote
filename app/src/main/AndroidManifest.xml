@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Only while the mic button is held: voice search on the TV. The audio goes to the TV only. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Android 17: local-network access is a runtime permission. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
@@ -16,7 +18,8 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:screenOrientation="portrait">
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
