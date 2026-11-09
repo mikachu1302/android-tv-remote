@@ -81,6 +81,7 @@ jobs:
             xcrun simctl launch "$UDID" io.github.mikachu1302.tvremote -demo YES "$@" >/dev/null
             sleep 3
             xcrun simctl io "$UDID" screenshot "build/shots/$NAME.png"
+            xcrun simctl spawn "$UDID" launchctl list | grep -q "UIKitApplication:io.github.mikachu1302.tvremote" || echo "NOT RUNNING after launch: $NAME" | tee -a build/shots/NOT_RUNNING.txt
           }
           shot remote-glass-neon        -demoStyle glass -demoPalette neon
           shot remote-crt-neon          -demoStyle crt   -demoPalette neon
@@ -100,6 +101,13 @@ jobs:
           shot apps-crt                 -demoStyle crt   -demoScreen apps
           shot find-glass               -demoStyle glass -demoScreen find
           shot pairing-glass            -demoStyle glass -demoScreen pairing
+
+      - name: Crash reports
+        if: always()
+        run: |
+          mkdir -p build/crash
+          cp ~/Library/Logs/DiagnosticReports/*TVRemote* build/crash/ 2>/dev/null || true
+          ls build/crash
 
       - name: Unsigned IPA (for sideloading tools that sign it)
         if: always()
@@ -127,6 +135,13 @@ jobs:
           path: |
             build/tests.xcresult
             build/xcodebuild.log
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: crash-reports
+          path: build/crash
           if-no-files-found: ignore
 
       - uses: actions/upload-artifact@v4

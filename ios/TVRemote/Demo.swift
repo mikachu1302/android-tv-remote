@@ -9,7 +9,7 @@ enum Demo {
     static var enabled: Bool { defaults.bool(forKey: "demo") }
     static var screen: String { defaults.string(forKey: "demoScreen") ?? "remote" }
     static var page: Int { defaults.integer(forKey: "demoPage") }
-    static var stickOn: Bool { defaults.object(forKey: "demoStickOn") as? Bool ?? true }
+    static var stickOn: Bool { defaults.object(forKey: "demoStickOn") == nil ? true : defaults.bool(forKey: "demoStickOn") }
 
     static var style: UiStyle? { defaults.string(forKey: "demoStyle").flatMap { $0 == "crt" ? .crt : $0 == "glass" ? .glass : nil } }
     static var palette: String? { defaults.string(forKey: "demoPalette") }

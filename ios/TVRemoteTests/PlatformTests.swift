@@ -8,27 +8,33 @@ import TVRemoteCore
 
 /// A TLS server standing in for the TV: it uses our own identity as its certificate, remembers the client
 /// certificate it was shown, and hands each connection to `onConnection`.
+private final class CertificateRecorder {
+    private let lock = NSLock()
+    private var der: Data?
+    var value: Data? { lock.lock(); defer { lock.unlock() }; return der }
+    func record(_ data: Data) { lock.lock(); der = data; lock.unlock() }
+}
+
 private final class FakeTv {
     let listener: NWListener
     private let queue = DispatchQueue(label: "fake-tv")
-    private let lock = NSLock()
-    private var clientCertificate: Data?
+    private let recorder = CertificateRecorder()
     var port: UInt16 = 0
 
-    var clientCertificateDER: Data? { lock.lock(); defer { lock.unlock() }; return clientCertificate }
+    var clientCertificateDER: Data? { recorder.value }
 
     init(onConnection: @escaping (NWConnection, FakeTv) -> Void) throws {
         let identity = try Identity.identity()
+        let queue = DispatchQueue(label: "fake-tv-handshake")
+        let recorder = self.recorder
         let tls = NWProtocolTLS.Options()
         let options = tls.securityProtocolOptions
         sec_protocol_options_set_local_identity(options, sec_identity_create(identity)!)
         sec_protocol_options_set_peer_authentication_required(options, true)
-        sec_protocol_options_set_verify_block(options, { [weak self] _, trust, complete in
+        sec_protocol_options_set_verify_block(options, { _, trust, complete in
             let secTrust = sec_trust_copy_ref(trust).takeRetainedValue()
             if let chain = SecTrustCopyCertificateChain(secTrust) as? [SecCertificate], let leaf = chain.first {
-                self?.lock.lock()
-                self?.clientCertificate = SecCertificateCopyData(leaf) as Data
-                self?.lock.unlock()
+                recorder.record(SecCertificateCopyData(leaf) as Data)
             }
             complete(true)
         }, queue)
