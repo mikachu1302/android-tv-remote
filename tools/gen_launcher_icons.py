@@ -254,4 +254,5 @@ def main():
     print("generated icons for:", ", ".join(ids))
 
 
-main()
+if __name__ == "__main__":
+    main()

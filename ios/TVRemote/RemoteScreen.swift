@@ -427,8 +427,10 @@ private struct GlassDial: View {
             let s = dial / 272
             let arrow = 64 * s
             let edge = 10 * s
-            let ring: [Color] = (term.palette.stripes.map { $0 + [$0[0]] } ?? [term.palette.primary, term.palette.action, term.palette.primary])
-                .map { Color(hex: $0) }
+            // The ring fades between the two accents, or runs through the rainbow (Pride); it closes on its first colour.
+            let stripes = term.palette.stripes ?? []
+            let colours: [UInt32] = stripes.count >= 2 ? stripes + [stripes[0]] : [term.palette.primary, term.palette.action, term.palette.primary]
+            let ring = colours.map { Color(hex: $0) }
             ZStack {
                 Circle().stroke(term.action.opacity(0.10), lineWidth: 16).padding(-2)
                 Circle().stroke(term.primary.opacity(0.10), lineWidth: 8).padding(2)

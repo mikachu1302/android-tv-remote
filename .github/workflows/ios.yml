@@ -52,6 +52,7 @@ jobs:
         working-directory: ios
         run: |
           set -o pipefail
+          mkdir -p ../build
           xcodebuild test \
             -project TVRemote.xcodeproj -scheme TVRemote \
             -destination "id=${{ steps.sim.outputs.udid }}" \
@@ -59,7 +60,7 @@ jobs:
             -resultBundlePath ../build/tests.xcresult \
             -parallel-testing-enabled NO \
             CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES \
-            | tee ../build/xcodebuild.log | tail -80
+            > ../build/xcodebuild.log 2>&1 || { tail -5 ../build/xcodebuild.log; false; }
 
       - name: Errors and failed tests (compact)
         if: always()

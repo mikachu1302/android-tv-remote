@@ -21,9 +21,17 @@ logos_src = (src / "AppLogos.kt").read_text()
 logos = re.findall(r'"([^"]+)" to AppLogo\(\s*"([^"]+)",\s*(Color\(0x[0-9A-Fa-f]+\)|null)', logos_src)
 
 theme = (src / "Theme.kt").read_text()
-pal = re.findall(r'val (\w+) = Palette\(\s*"(\w+)", "([^"]+)", bg = c\(0x(\w+)\), surface = c\(0x(\w+)\), border = c\(0x(\w+)\),\s*'
-                 r'text = c\(0x(\w+)\), dim = c\(0x(\w+)\), primary = c\(0x(\w+)\), action = c\(0x(\w+)\),\s*'
-                 r'soft = c\(0x(\w+)\), warn = c\(0x(\w+)\)(?:,\s*stripes = listOf\(([^)]*)\))?', theme)
+pal = []
+for var, body in re.findall(r"val (\w+) = Palette\((.*?)\n    \)", theme, re.S):
+    def field(name):
+        return re.search(name + r" = c\(0x(\w+)\)", body).group(1)
+    pid, pname = re.search(r'"(\w+)", "([^"]+)"', body).groups()
+    stripes = None
+    m = re.search(r"stripes = listOf\((.*)\)\s*,?\s*$", body.strip(), re.S)
+    if m:
+        stripes = ", ".join("0x" + h for h in re.findall(r"c\(0x(\w+)\)", m.group(1)))
+    pal.append((var, pid, pname, field("bg"), field("surface"), field("border"), field("text"), field("dim"),
+                field("primary"), field("action"), field("soft"), field("warn"), stripes))
 order = re.search(r"val all = listOf\(([^)]*)\)", theme).group(1).replace(" ", "").split(",")
 
 prefs = (src / "Prefs.kt").read_text()
@@ -54,9 +62,7 @@ L.append("]\n")
 
 L.append("public enum PaletteData {")
 for var, pid, name, bg, surface, border, text, dim, primary, action, soft, warn, stripes in pal:
-    st = "nil"
-    if stripes:
-        st = "[" + ", ".join("0x" + h for h in re.findall(r"c\(0x(\w+)\)", stripes)) + "]"
+    st = "[" + stripes + "]" if stripes else "nil"
     L.append(f"    public static let {var.lower()} = Palette(id: {swift_str(pid)}, name: {swift_str(name)}, bg: 0x{bg}, surface: 0x{surface}, "
              f"border: 0x{border}, text: 0x{text}, dim: 0x{dim}, primary: 0x{primary}, action: 0x{action}, soft: 0x{soft}, warn: 0x{warn}, stripes: {st})")
 L.append("    public static let all: [Palette] = [" + ", ".join(o.lower() for o in order) + "]")

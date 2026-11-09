@@ -45,6 +45,7 @@ struct AppShortcutsScreen: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
         }
+        .clipped() // content scrolls under the status bar otherwise
         .sheet(isPresented: $custom) { CustomAppSheet() }
     }
 }

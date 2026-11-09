@@ -137,7 +137,7 @@ struct SwitchRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
-                Text(title).font(term.font(16, bold: true)).foregroundColor(term.text).lineLimit(1)
+                Text(title).font(term.font(16, bold: true)).foregroundColor(term.text).lineLimit(2).fixedSize(horizontal: false, vertical: true)
                 InfoButton(open: open) { open.toggle() }
                 Spacer(minLength: 8)
                 Toggle("", isOn: Binding(get: { isOn }, set: onChange))
@@ -220,6 +220,7 @@ struct SettingsScreen: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
         }
+        .clipped() // content scrolls under the status bar otherwise
         .onAppear {
             // Screenshots: scroll to a section by name (-demoScroll colors|icons|volume).
             if Demo.enabled, let target = UserDefaults.standard.string(forKey: "demoScroll") {

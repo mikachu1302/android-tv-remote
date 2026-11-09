@@ -57,6 +57,8 @@ struct RemoteButton<Content: View>: View {
 
     @State private var pressed = false
     @State private var session: PressSession?
+    /// The current touch moved like a swipe: ignore the rest of it (until the finger lifts).
+    @State private var ignoreTouch = false
     @GestureState private var isDown = false
 
     init(
@@ -102,15 +104,30 @@ struct RemoteButton<Content: View>: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .updating($isDown) { _, state, _ in state = true }
-                    .onChanged { _ in if session == nil { begin() } }
-                    .onEnded { _ in end(completed: true) }
+                    .onChanged { value in
+                        if ignoreTouch { return }
+                        if session == nil { begin() }
+                        // A touch that travels this far before the key went down is a swipe, not a press.
+                        if let s = session, !s.downFired, swipeable, hypot(value.translation.width, value.translation.height) > 10 {
+                            ignoreTouch = true
+                            end(completed: false)
+                        }
+                    }
+                    .onEnded { _ in
+                        if !ignoreTouch { end(completed: true) }
+                    }
             )
             .onChange(of: isDown) { down in
+                if down { return }
+                ignoreTouch = false
                 // Without an `onEnded` the touch was taken over (a swipe, the system): release without clicking.
-                if !down { DispatchQueue.main.async { if session != nil { end(completed: false) } } }
+                DispatchQueue.main.async { if session != nil { end(completed: false) } }
             }
             .onChange(of: pageDrag.dragging) { dragging in
-                if dragging, let s = session, !s.downFired { end(completed: false) }
+                if dragging, let s = session, !s.downFired {
+                    ignoreTouch = true
+                    end(completed: false)
+                }
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(description)

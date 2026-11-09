@@ -75,7 +75,7 @@ public enum PaletteData {
     public static let nord = Palette(id: "nord", name: "Nord", bg: 0x2E3440, surface: 0x3B4252, border: 0x7B88A1, text: 0xECEFF4, dim: 0xAEB7C8, primary: 0xA3BE8C, action: 0x88C0D0, soft: 0xEBCB8B, warn: 0xE8A08A, stripes: nil)
     public static let amber = Palette(id: "amber", name: "Amber CRT", bg: 0x0C0A05, surface: 0x14100A, border: 0x7A5A12, text: 0xFFD98A, dim: 0xC49A3C, primary: 0xFFB000, action: 0xFF6A00, soft: 0xFFD166, warn: 0xFF4D4D, stripes: nil)
     public static let matrix = Palette(id: "matrix", name: "Matrix", bg: 0x020A04, surface: 0x06140A, border: 0x1F7A3A, text: 0xB8FFC8, dim: 0x5FD47B, primary: 0x00FF41, action: 0xCCFF00, soft: 0x00CC66, warn: 0xFFD23F, stripes: nil)
-    public static let pride = Palette(id: "pride", name: "Pride", bg: 0x100E17, surface: 0x1B1826, border: 0x7B6FA0, text: 0xF6F2FF, dim: 0xC2B8DE, primary: 0x74D7EE, action: 0xFF7EB3, soft: 0xFFED00, warn: 0xFF8C00, stripes: [])
+    public static let pride = Palette(id: "pride", name: "Pride", bg: 0x100E17, surface: 0x1B1826, border: 0x7B6FA0, text: 0xF6F2FF, dim: 0xC2B8DE, primary: 0x74D7EE, action: 0xFF7EB3, soft: 0xFFED00, warn: 0xFF8C00, stripes: [0xFF4B4B, 0xFF8C00, 0xFFED00, 0x2FD05B, 0x3D7BFF, 0xA24BD6])
     public static let all: [Palette] = [neon, dracula, synthwave, catppuccin, gruvbox, tokyo, nord, amber, matrix, pride]
 }
 

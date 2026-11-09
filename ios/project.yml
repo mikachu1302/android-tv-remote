@@ -32,12 +32,15 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "icon_dracula icon_synthwave icon_catppuccin icon_gruvbox icon_tokyo icon_nord icon_amber icon_matrix icon_pride icon_pride_bezel icon_pride_light icon_pride_rainbow icon_pride_night icon_pride_big"
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: TVRemote/TVRemote.entitlements
     info:
       path: TVRemote/Info.plist
       properties:
         CFBundleDisplayName: TV Remote
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIRequiresFullScreen: true

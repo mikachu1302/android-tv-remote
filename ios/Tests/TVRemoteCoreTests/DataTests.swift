@@ -29,7 +29,8 @@ final class PaletteTests: XCTestCase {
         XCTAssertEqual(Palette.byId("nope"), PaletteData.neon)
         XCTAssertEqual(Palette.byId("nord"), PaletteData.nord)
         XCTAssertEqual(PaletteData.all.count, 10)
-        XCTAssertNotNil(PaletteData.pride.stripes)
+        XCTAssertEqual(PaletteData.pride.stripes?.count, 6)
+        XCTAssertTrue(PaletteData.all.filter { $0.id != "pride" }.allSatisfy { $0.stripes == nil })
     }
 }
 
