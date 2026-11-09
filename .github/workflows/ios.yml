@@ -61,6 +61,10 @@ jobs:
             CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES \
             | tee ../build/xcodebuild.log | tail -80
 
+      - name: Errors and failed tests (compact)
+        if: always()
+        run: grep -hE "error:|\\*\\* TEST|failed \\(|Test Case .* failed" build/xcodebuild.log | sed 's|/Users/runner/work/[^/]*/[^/]*/||' | sort -u | head -80 || true
+
       - name: Screenshots of every screen
         if: always()
         run: |
@@ -102,7 +106,7 @@ jobs:
         working-directory: ios
         run: |
           xcodebuild build -project TVRemote.xcodeproj -scheme TVRemote -configuration Release -sdk iphoneos \
-            -derivedDataPath ../build/device CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | tail -5
+            -derivedDataPath ../build/device CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" > ../build/device.log || { tail -40 ../build/device.log; exit 1; }
           APP=$(find ../build/device/Build/Products -name TVRemote.app -path "*iphoneos*" | head -1)
           [ -n "$APP" ] || exit 0
           mkdir -p ../build/ipa/Payload

@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import CoreText
 import TVRemoteCore
 
 extension Color {
@@ -59,7 +60,7 @@ struct TermTheme {
 
     /// The font of the style. VT323 is drawn small, so its sizes are scaled up to match the other font.
     func font(_ size: CGFloat, bold: Bool = false) -> Font {
-        crt ? .custom("VT323-Regular", size: size * 1.3) : Font(firaCode(size, weight: bold ? 700 : 400))
+        crt ? .custom("VT323-Regular", size: size * 1.3) : Font(firaCode(size, weight: bold ? 700 : 400) as CTFont)
     }
 }
 

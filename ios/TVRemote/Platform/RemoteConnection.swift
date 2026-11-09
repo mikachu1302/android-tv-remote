@@ -40,7 +40,9 @@ final class RemoteConnection {
     }
 
     private func startReading() {
-        let reader = Task { [weak self] in await self?.readLoop() }
+        let reader = Task { [weak self] in
+            if let self { await self.readLoop() }
+        }
         // Pings arrive every ~5 s; silence for much longer means the link is dead.
         let watchdog = Task { [weak self] in
             while !Task.isCancelled {

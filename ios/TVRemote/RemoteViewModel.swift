@@ -112,7 +112,7 @@ final class RemoteViewModel: ObservableObject {
         guard !demo else { return }
         startAudio()
         guard loop == nil, paired != nil else { return }
-        loop = Task { await connectionLoop() }
+        loop = Task { [self] in await connectionLoop() }
     }
 
     /// The app left the screen: close the connection (the TV frees the session; no battery use).
@@ -237,7 +237,7 @@ final class RemoteViewModel: ObservableObject {
         guard !voiceHeld else { return }
         voiceHeld = true
         voice = .starting
-        Task {
+        Task { [self] in
             let granted = await requestMicrophone()
             guard granted, voiceHeld else {
                 voiceHeld = false
@@ -318,7 +318,7 @@ final class RemoteViewModel: ObservableObject {
     /// Polls the TV's volume while the app is visible; nil while it does not answer (off, or another network).
     private func startAudio() {
         guard audioLoop == nil else { return }
-        audioLoop = Task {
+        audioLoop = Task { [self] in
             while !Task.isCancelled {
                 guard let tv = audioTv, settings.tvVolume else {
                     audio = nil
@@ -360,7 +360,7 @@ final class RemoteViewModel: ObservableObject {
                 nudgeVolume(step)
             case .startLong:
                 ramp?.cancel()
-                ramp = Task {
+                ramp = Task { [self] in
                     nudgeVolume(step)
                     try? await Task.sleep(nanoseconds: 400_000_000)
                     while !Task.isCancelled {
@@ -443,7 +443,7 @@ final class RemoteViewModel: ObservableObject {
         pairing = .starting(tv)
         let session = PairingSession(host: tv.host)
         pairingSession = session
-        Task {
+        Task { [self] in
             do {
                 try await session.start()
                 pairing = .waitingForCode(tv, wrongCode: wrongCode)
@@ -456,7 +456,7 @@ final class RemoteViewModel: ObservableObject {
 
     func submitCode(_ code: String) {
         guard case let .waitingForCode(tv, _) = pairing, let session = pairingSession else { return }
-        Task {
+        Task { [self] in
             let ok = (try? await session.finish(code: code)) ?? false
             if ok, let pin = session.serverPin {
                 let found = PairedTv(name: tv.name, host: tv.host, pin: pin)
