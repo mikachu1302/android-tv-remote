@@ -106,12 +106,12 @@ final class TlsTests: XCTestCase {
         let good = try TLSConnection(host: "127.0.0.1", port: tv.port, pin: pin)
         try await good.connect()
         var buffer = FrameBuffer()
-        var frame: [UInt8]?
-        while frame == nil {
+        var message: [UInt8]?
+        while message == nil {
             buffer.append(try await good.receive())
-            frame = try buffer.next()
+            message = try buffer.next()
         }
-        XCTAssertEqual(frame, [1, 2, 3])
+        XCTAssertEqual(message, [1, 2, 3])
         good.close()
 
         // Another pin is refused with the pin-mismatch error.
