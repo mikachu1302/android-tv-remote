@@ -19,6 +19,17 @@ class StateTest {
     }
 
     @Test
+    fun switchingOffForgetsTheOpenApp() {
+        val open = TvState(on = true, appPackage = "com.example.app", appLabel = "Some App")
+        val off = open.apply(msg { message(40) {} })
+        assertEquals(false, off.on)
+        assertNull(off.appPackage)
+        assertNull(off.appLabel)
+        // switching on keeps what we know
+        assertEquals("com.example.app", open.apply(msg { message(40) { varint(1, 1) } }).appPackage)
+    }
+
+    @Test
     fun volumeMessageGivesLevelMaxAndMute() {
         val s = TvState().apply(msg { message(50) { string(3, "x"); varint(6, 100); varint(7, 17); varint(8, 1) } })
         assertEquals(Volume(level = 17, max = 100, muted = true), s.volume)

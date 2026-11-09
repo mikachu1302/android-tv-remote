@@ -121,7 +121,10 @@ fun TvState.apply(msg: PbMessage): TvState = when {
         )
     }
     // `started` is a bool: when false the field is absent, the message still present.
-    msg.has(F_START) -> copy(on = msg.message(F_START)?.long(1) == 1L)
+    // A stick that goes off forgets its app: the last one must not stay highlighted.
+    msg.has(F_START) -> (msg.message(F_START)?.long(1) == 1L).let { on ->
+        if (on) copy(on = true) else copy(on = false, appPackage = null, appLabel = null)
+    }
     // Some sticks send this message without a level (volume lives on the TV, over HDMI-CEC):
     // only a message with a maximum counts as a volume report.
     msg.has(F_SET_VOLUME) -> msg.message(F_SET_VOLUME)?.takeIf { it.long(6) > 0 }?.let {

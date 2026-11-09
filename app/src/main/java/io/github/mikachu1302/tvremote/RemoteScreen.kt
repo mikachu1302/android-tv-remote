@@ -122,7 +122,8 @@ fun RemoteScreen(tv: PairedTv, vm: RemoteViewModel, onSettings: () -> Unit, onAd
     }
 
     val chips = statusChips(link, state, voice, term.palette)
-    val currentApp = state.appPackage?.let { shortcutForPackage(it, state.appLabel) }
+    // The stick keeps reporting the last app after it went off: only an app on a stick that is on is "open".
+    val currentApp = state.appPackage?.takeIf { state.on != false }?.let { shortcutForPackage(it, state.appLabel) }
     val on = state.on == true
     val powerLabel = "Power, " + when (state.on) { true -> "on"; false -> "off"; null -> "state unknown" }
     val tvAudio by vm.audio.collectAsStateWithLifecycle()
@@ -256,7 +257,7 @@ private fun statusChips(link: Link, state: TvState, voice: VoiceUi, p: Palette):
         Link.PinChanged -> add(Chip("certificate changed, pair again", p.warn))
         Link.Idle -> add(Chip("not connected", p.dim))
     }
-    state.appPackage?.let { add(Chip(shortcutForPackage(it, state.appLabel).name, p.action, dot = false)) }
+    state.appPackage?.takeIf { state.on != false }?.let { add(Chip(shortcutForPackage(it, state.appLabel).name, p.action, dot = false)) }
 }
 
 /** Text glow for the CRT look. */
