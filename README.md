@@ -39,7 +39,8 @@ Requires the Android SDK (platform 37) and a JDK. See `AGENTS.md` for details.
 The iPhone app (SwiftUI, iOS 16 or newer, laid out for small screens like the iPhone 13 mini) is built by GitHub Actions
 on a Mac (`.github/workflows/ios.yml`): the run's `ipa-unsigned` artifact is an unsigned IPA. Install it with a tool that
 signs it with your Apple ID (for example AltStore or SideStore; a free Apple ID needs a re-sign every 7 days), or sign it
-with a paid developer account and distribute it through TestFlight. The protocol and screens are tested in CI against a
+with a paid developer account and distribute it through TestFlight.
+Step-by-step instructions in German for AltStore on a Mac: `docs/iPhone-Installation.md`. The protocol and screens are tested in CI against a
 fake TV; see `AGENTS.md` for what is and is not verified.
 
 ## Credits
