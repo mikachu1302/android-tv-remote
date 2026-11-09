@@ -118,7 +118,7 @@ final class ModelTests: XCTestCase {
 }
 
 final class TvAudioTests: XCTestCase {
-    private let description = """
+    private let deviceXML = """
     <?xml version="1.0"?><root xmlns="urn:schemas-upnp-org:device-1-0"><device>
     <friendlyName>Test &amp; Lounge</friendlyName>
     <serviceList>
@@ -128,7 +128,7 @@ final class TvAudioTests: XCTestCase {
     """
 
     func testDescriptionGivesNameAndRenderingControlPath() {
-        let parsed = Upnp.parseDescription(description)
+        let parsed = Upnp.parseDescription(deviceXML)
         XCTAssertEqual(parsed?.name, "Test & Lounge")
         XCTAssertEqual(parsed?.control, "/ctl/rc")
         XCTAssertNil(Upnp.parseDescription("<root><device><friendlyName>Lamp</friendlyName></device></root>"))
