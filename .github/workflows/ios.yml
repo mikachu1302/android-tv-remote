@@ -1,0 +1,132 @@
+name: iOS
+
+on:
+  push:
+    branches: [ios, main]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+          xcrun simctl list devicetypes | grep -i "iphone" | head -40
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Core tests (pure Swift package)
+        working-directory: ios
+        run: swift test
+
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Create and boot an iPhone 13 mini simulator
+        id: sim
+        run: |
+          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c "
+          import json,sys
+          rts=[r for r in json.load(sys.stdin)['runtimes'] if r.get('isAvailable') and r['identifier'].split('.')[-1].startswith('iOS')]
+          rts.sort(key=lambda r:[int(x) for x in r['version'].split('.')])
+          print(rts[-1]['identifier'])")
+          echo "runtime: $RUNTIME"
+          UDID=""
+          for TYPE in com.apple.CoreSimulator.SimDeviceType.iPhone-13-mini com.apple.CoreSimulator.SimDeviceType.iPhone-12-mini com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation; do
+            UDID=$(xcrun simctl create "TV Remote test phone" "$TYPE" "$RUNTIME" 2>/dev/null) && { echo "device type: $TYPE"; break; } || UDID=""
+          done
+          [ -n "$UDID" ] || { echo "no small iPhone simulator could be created"; exit 1; }
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Build and test (unit tests and UI tests on the simulator)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project TVRemote.xcodeproj -scheme TVRemote \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath ../build/derived \
+            -resultBundlePath ../build/tests.xcresult \
+            -parallel-testing-enabled NO \
+            CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES \
+            | tee ../build/xcodebuild.log | tail -80
+
+      - name: Screenshots of every screen
+        if: always()
+        run: |
+          UDID=${{ steps.sim.outputs.udid }}
+          APP=$(find build/derived/Build/Products -name TVRemote.app -path "*iphonesimulator*" | head -1)
+          echo "app: $APP"
+          [ -n "$APP" ] || exit 0
+          mkdir -p build/shots
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl ui "$UDID" appearance dark || true
+          shot() { # name, launch arguments...
+            NAME=$1; shift
+            xcrun simctl terminate "$UDID" io.github.mikachu1302.tvremote >/dev/null 2>&1 || true
+            xcrun simctl launch "$UDID" io.github.mikachu1302.tvremote -demo YES "$@" >/dev/null
+            sleep 3
+            xcrun simctl io "$UDID" screenshot "build/shots/$NAME.png"
+          }
+          shot remote-glass-neon        -demoStyle glass -demoPalette neon
+          shot remote-crt-neon          -demoStyle crt   -demoPalette neon
+          shot remote-glass-pride       -demoStyle glass -demoPalette pride
+          shot remote-crt-amber         -demoStyle crt   -demoPalette amber
+          shot remote-glass-stick-off   -demoStyle glass -demoStickOn NO
+          shot numbers-glass            -demoStyle glass -demoPage 1
+          shot numbers-crt              -demoStyle crt   -demoPage 1
+          shot more-glass               -demoStyle glass -demoPage 2
+          shot more-crt                 -demoStyle crt   -demoPage 2
+          shot settings-glass-top       -demoStyle glass -demoScreen settings
+          shot settings-crt-top         -demoStyle crt   -demoScreen settings
+          shot settings-glass-colors    -demoStyle glass -demoScreen settings -demoScroll colors
+          shot settings-glass-icons     -demoStyle glass -demoScreen settings -demoScroll icons
+          shot settings-glass-volume    -demoStyle glass -demoScreen settings -demoScroll volume
+          shot apps-glass               -demoStyle glass -demoScreen apps
+          shot apps-crt                 -demoStyle crt   -demoScreen apps
+          shot find-glass               -demoStyle glass -demoScreen find
+          shot pairing-glass            -demoStyle glass -demoScreen pairing
+
+      - name: Unsigned IPA (for sideloading tools that sign it)
+        if: always()
+        working-directory: ios
+        run: |
+          xcodebuild build -project TVRemote.xcodeproj -scheme TVRemote -configuration Release -sdk iphoneos \
+            -derivedDataPath ../build/device CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | tail -5
+          APP=$(find ../build/device/Build/Products -name TVRemote.app -path "*iphoneos*" | head -1)
+          [ -n "$APP" ] || exit 0
+          mkdir -p ../build/ipa/Payload
+          cp -R "$APP" ../build/ipa/Payload/
+          (cd ../build/ipa && zip -qry TVRemote-unsigned.ipa Payload)
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: build/shots
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            build/tests.xcresult
+            build/xcodebuild.log
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ipa-unsigned
+          path: build/ipa/TVRemote-unsigned.ipa
+          if-no-files-found: ignore
