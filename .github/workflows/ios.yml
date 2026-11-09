@@ -102,6 +102,8 @@ jobs:
           shot apps-crt                 -demoStyle crt   -demoScreen apps
           shot find-glass               -demoStyle glass -demoScreen find
           shot pairing-glass            -demoStyle glass -demoScreen pairing
+          shot keyboard-glass           -demoStyle glass -demoScreen keyboard
+          shot keyboard-crt             -demoStyle crt   -demoScreen keyboard
 
       - name: Crash reports
         if: always()

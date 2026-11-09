@@ -166,6 +166,46 @@ notes above plus these files are its spec.
 - Long explanations go behind a small "i" (`InfoButton`), not into the list: settings titles stay
   on one line. Cards side by side have equal height (`IntrinsicSize.Max` + `fillMaxHeight`).
 
+## iOS app (`ios/`)
+
+A SwiftUI port with the same features and both styles, for an iPhone 13 mini (360 x 780 pt) and up. Nothing here
+can be built on Linux except the core package, so **GitHub Actions on a macOS runner is the build machine**
+(`.github/workflows/ios.yml`, branch `ios`): it runs the core tests, generates the Xcode project, runs the app tests
+and UI tests on an iPhone 13 mini simulator, takes screenshots of every screen (demo mode, see below) and builds an
+unsigned IPA. Artifacts: `screenshots`, `test-results`, `ipa-unsigned`. Look at the screenshots after every UI change
+(`gh run download <id>`).
+
+- `ios/Sources/TVRemoteCore` – platform-neutral Swift package: protobuf, TV state, messages, pairing secret, SHA-256,
+  DER/X.509, models, palettes, more keys, UPnP/Wake-on-LAN helpers. Tests in `ios/Tests` run on Linux with a Swift
+  toolchain (`swift test` in `ios/`; a toolchain from swift.org unpacked in `~/.local/swift` works without root).
+  `GeneratedData.swift` (icons, logos, palettes, app catalog) comes from the Android sources:
+  `python3 tools/port_data_to_swift.py` after changing any of them.
+- `ios/TVRemote` – the app (SwiftUI, iOS 16+). `Platform/` has the Apple-only networking: `Identity` (RSA key in the
+  Keychain, self-signed certificate built with `DER`, since iOS cannot create certificates), `TLSConnection`
+  (Network.framework, client identity, certificate pinned in a verify block), `PairingSession`, `RemoteConnection`,
+  `Discovery` (Bonjour), `AudioClient` (UPnP), `WakeOnLan`, `VoiceStreamer` (AVAudioEngine to 8 kHz PCM).
+  `RemoteViewModel` mirrors the Android view model. `Theme`, `Controls` (the button with the same press / hold / swipe
+  rules), `RemoteScreen`, `SettingsScreen`, `AppShortcutsScreen`, `Screens` (find, pair) mirror the Android screens.
+- The project file is generated from `ios/project.yml` by XcodeGen (never committed).
+- **Demo mode** for screenshots and UI tests: launch arguments `-demo YES -demoScreen remote|settings|apps|find|pairing|keyboard
+  -demoStyle crt|glass -demoPalette <id> -demoPage 0..2 -demoStickOn NO -demoScroll colors|icons|volume`. It uses a made-up
+  TV, no network, and records pressed keys in an invisible `demo-keys` element that `ios/TVRemoteUITests` reads.
+- App icons: `python3 tools/gen_ios_icons.py` draws all 16 (one per palette, five Pride) and their previews into the asset
+  catalog from the same geometry as the Android icons; alternate icon names go into `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`
+  in `project.yml` (listed in `ios/alternate-icons.txt`). iOS shows its own alert on every icon change, so the icon only
+  changes when the user picks an icon, not on every palette change.
+- iOS limits worth knowing: the first connection triggers the system's local-network prompt (`NSLocalNetworkUsageDescription`,
+  `NSBonjourServices`); plain HTTP to the TV's UPnP service needs `NSAllowsLocalNetworking`; SSDP and Wake-on-LAN broadcasts need
+  Apple's multicast entitlement, which free accounts cannot get, so the TV is found by probing the /24 and the wake packet also
+  goes to the TV's own address.
+- **Verified in CI:** protocol and state (shared tests), the Keychain identity, the pinned TLS connection, the control
+  connection and the whole pairing dialogue against a fake TV on loopback, the SVG parser, and tap / hold / swipe behaviour
+  on the simulator. **Not verified:** anything against a real TV or stick, a real device (Keychain with a real provisioning
+  profile, the local-network prompt, the microphone, haptics).
+- Installing on a phone needs signing. The IPA from CI is unsigned: sideload it with a tool that signs with a free Apple ID
+  (AltStore / SideStore; the app then expires after 7 days and must be re-signed), or sign it with a paid developer account
+  and use TestFlight.
+
 ## Conventions
 
 - UI text is English and short. Colour is never the only signal – add an icon, label or

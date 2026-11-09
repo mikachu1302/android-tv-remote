@@ -24,7 +24,7 @@ struct RemoteScreen: View {
     @StateObject private var pageDrag = PageDragState()
     @State private var page = Demo.enabled ? min(max(Demo.page, 0), 2) : 0
     /// Keyboard bar: nil = closed, otherwise the id of the session (a new id resets the field).
-    @State private var keyboard: Int?
+    @State private var keyboard: Int? = Demo.enabled && Demo.screen == "keyboard" ? 1 : nil
     @State private var keyboardInitial = ""
     @State private var sessions = 0
 

@@ -84,7 +84,8 @@ final class RemoteUITests: XCTestCase {
         let window = app.windows.firstMatch.frame
         var problems = [String]()
         for id in ["key-Settings", "key-Volume up", "key-Volume down", "key-Home", "key-Back", "key-Play or pause", "key-Channel up", "key-Channel down", "key-OK"] {
-            let element = app.buttons[id]
+            // The More page has keys with the same names (Settings, Menu...): the first match is the one on this page.
+            let element = app.buttons.matching(identifier: id).firstMatch
             if !element.exists { problems.append("\(id) is missing"); continue }
             if !window.contains(element.frame) { problems.append("\(id) \(element.frame) is outside \(window)") }
         }
