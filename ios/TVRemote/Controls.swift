@@ -57,10 +57,9 @@ struct RemoteButton<Content: View>: View {
 
     @State private var pressed = false
     @State private var session: PressSession?
-    /// The touch that is under way (its start time) and the one that moved like a swipe: the rest of that touch is ignored.
-    /// Tied to one touch, so a missed "finger lifted" can never swallow the next tap.
-    @State private var touchStart: Date?
-    @State private var ignoredTouch: Date?
+    /// The current touch moved like a swipe: ignore the rest of it. Cleared when the finger lifts and, as a second guard, at
+    /// the first event of the next touch (which always starts with zero movement), so a missed lift cannot swallow a tap.
+    @State private var ignoreTouch = false
     @GestureState private var isDown = false
 
     init(
@@ -107,26 +106,28 @@ struct RemoteButton<Content: View>: View {
                 DragGesture(minimumDistance: 0)
                     .updating($isDown) { _, state, _ in state = true }
                     .onChanged { value in
-                        if ignoredTouch == value.startTime { return }
-                        touchStart = value.startTime
+                        if value.translation == .zero { ignoreTouch = false }
+                        if ignoreTouch { return }
                         if session == nil { begin() }
                         // A touch that travels this far before the key went down is a swipe, not a press.
                         if let s = session, !s.downFired, swipeable, hypot(value.translation.width, value.translation.height) > 10 {
-                            ignoredTouch = value.startTime
+                            ignoreTouch = true
                             end(completed: false)
                         }
                     }
-                    .onEnded { value in
-                        if ignoredTouch != value.startTime { end(completed: true) }
+                    .onEnded { _ in
+                        if !ignoreTouch { end(completed: true) }
                     }
             )
             .onChange(of: isDown) { down in
+                if down { return }
+                ignoreTouch = false
                 // Without an `onEnded` the touch was taken over (a swipe, the system): release without clicking.
-                if !down { DispatchQueue.main.async { if session != nil { end(completed: false) } } }
+                DispatchQueue.main.async { if session != nil { end(completed: false) } }
             }
             .onChange(of: pageDrag.dragging) { dragging in
                 if dragging, let s = session, !s.downFired {
-                    ignoredTouch = touchStart
+                    ignoreTouch = true
                     end(completed: false)
                 }
             }
