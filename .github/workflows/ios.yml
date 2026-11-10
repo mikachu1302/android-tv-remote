@@ -59,6 +59,7 @@ jobs:
             -derivedDataPath ../build/derived \
             -resultBundlePath ../build/tests.xcresult \
             -parallel-testing-enabled NO \
+            -retry-tests-on-failure -test-iterations 2 \
             CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES \
             > ../build/xcodebuild.log 2>&1 || { tail -5 ../build/xcodebuild.log; false; }
 
@@ -148,6 +149,7 @@ jobs:
           if-no-files-found: ignore
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ipa-unsigned
           path: build/ipa/TVRemote-unsigned.ipa

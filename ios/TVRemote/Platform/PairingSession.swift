@@ -8,13 +8,15 @@ import TVRemoteCore
 final class PairingSession {
     private let host: String
     private let port: UInt16
+    private let connectTimeout: TimeInterval
     private var connection: TLSConnection?
     private var frames = FrameBuffer()
     private(set) var serverPin: String?
 
-    init(host: String, port: UInt16 = pairingPort) {
+    init(host: String, port: UInt16 = pairingPort, connectTimeout: TimeInterval = 10) {
         self.host = host
         self.port = port
+        self.connectTimeout = connectTimeout
     }
 
     private func next(_ expect: Int) async throws -> PbMessage {
@@ -36,7 +38,7 @@ final class PairingSession {
         let conn = try TLSConnection(host: host, port: port, pin: nil)
         connection = conn
         do {
-            try await conn.connect(timeout: 10)
+            try await conn.connect(timeout: connectTimeout)
             send(PairingMessages.pairingRequest())
             _ = try await next(PairingMessages.requestAckField)
             send(PairingMessages.options())

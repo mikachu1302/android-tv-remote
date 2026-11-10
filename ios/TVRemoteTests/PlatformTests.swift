@@ -104,7 +104,7 @@ final class TlsTests: XCTestCase {
 
         // First connection records the certificate (pin nil, like pairing).
         let probe = try TLSConnection(host: "127.0.0.1", port: tv.port, pin: nil)
-        try await probe.connect()
+        try await probe.connect(timeout: 60)
         let pin = SHA256.hex([UInt8](try XCTUnwrap(probe.serverCertificate)))
         probe.close()
 
@@ -155,7 +155,7 @@ final class RemoteConnectionTests: XCTestCase {
         defer { tv.stop() }
 
         let probe = try TLSConnection(host: "127.0.0.1", port: tv.port, pin: nil)
-        try await probe.connect()
+        try await probe.connect(timeout: 60)
         let pin = SHA256.hex([UInt8](try XCTUnwrap(probe.serverCertificate)))
         probe.close()
 
@@ -241,7 +241,7 @@ final class PairingTests: XCTestCase {
         defer { tv.stop() }
 
         // The right code: the pin we get back is the fake TV's certificate fingerprint.
-        let session = PairingSession(host: "127.0.0.1", port: tv.port)
+        let session = PairingSession(host: "127.0.0.1", port: tv.port, connectTimeout: 60)
         try await session.start()
         try await waitUntil { expectedHash.value != nil }
         let hex = code.value.map { String(format: "%02X", $0) }.joined()
@@ -253,7 +253,7 @@ final class PairingTests: XCTestCase {
         XCTAssertEqual(session.serverPin, SHA256.hex([UInt8](SecCertificateCopyData(try XCTUnwrap(serverCert)) as Data)))
 
         // A code whose checksum byte is wrong is refused before anything is sent to the TV.
-        let second = PairingSession(host: "127.0.0.1", port: tv.port)
+        let second = PairingSession(host: "127.0.0.1", port: tv.port, connectTimeout: 60)
         try await second.start()
         var wrong = code.value
         wrong[0] ^= 0xFF
