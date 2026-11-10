@@ -10,8 +10,8 @@ uses – over your local network.
 - Keyboard: type on the phone, it appears in the TV's text field (opens by itself when a
   text field gets focus)
 - Voice search: hold the mic button
-- App shortcuts row: the last tile (+) adds apps from a list (streaming, German TV libraries, music, Kodi, VLC …),
-  the app that is open on the TV, or any package name; drag to reorder, tap Remove to take one out
+- App shortcuts row: the last tile (+) adds apps from a list (streaming, German TV libraries, music …) or your own link;
+  drag to reorder, tap Remove to take one out. Most apps open directly (web link, Netflix through the stick's DIAL service, waipu.tv with the Home key); the rest open their Play Store page on the stick, where you press OK on "Open"
 - Holding a button acts like holding it on a physical remote
 - Reconnects by itself (also after the screen locked or the TV's address changed)
 - Two looks (Neon CRT and Glass) and ten colour palettes (one inspired by the Progress Pride flag),

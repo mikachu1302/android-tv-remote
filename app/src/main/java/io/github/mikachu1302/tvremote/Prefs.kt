@@ -35,63 +35,82 @@ data class RemoteSettings(
     val tvVolume: Boolean = true,
 )
 
-/** A tile in the app row: opens [link] on the TV (a deep link or `market://launch?id=<package>`). */
+/** A tile in the app row: opens [link] on the TV (a web link, a Play Store page, `dial://<app>`, or `key://<code>`). */
 data class AppShortcut(val name: String, val link: String)
 
-/** Opens any installed app by its Android package name (or its Play Store page if it is missing). */
-fun marketLink(pkg: String) = "market://launch?id=$pkg"
+/**
+ * An app the stick starts through its DIAL service (`POST http://<stick>:8008/apps/<name>`, the protocol Cast and
+ * phone apps use) rather than through an app link. For apps that ignore app links.
+ */
+fun dialLink(app: String) = "dial://$app"
+
+/** The DIAL application name in a [dialLink], or null for any other link. */
+fun dialApp(link: String): String? = if (link.startsWith("dial://")) link.removePrefix("dial://").ifBlank { null } else null
+
+/** The Play Store page of a package. The stick shows it; the user presses OK on "Open" (or "Install"). */
+fun playStoreLink(pkg: String) = "https://play.google.com/store/apps/details?id=$pkg"
+
+/** The old "launch" link of a package, which the waipu stick ignores. Only recognised in saved lists, to upgrade them. */
+private const val OLD_LAUNCH_PREFIX = "market://launch?id="
 
 /**
- * What a user may type for a custom shortcut: a web/deep link as is, or an
- * Android package name (`com.example.app`), which becomes a market link.
+ * What a user may type for a custom shortcut: a link as is, or an Android package name (`com.example.app`), which
+ * becomes the package's Play Store page.
  */
 fun customLink(input: String): String {
     val text = input.trim()
-    return if ("://" in text) text else marketLink(text)
+    return if ("://" in text) text else playStoreLink(text)
 }
 
+/** A key press as a shortcut: `key://<Android key code>`. On a waipu stick the Home key is the waipu.tv app. */
+fun keyLink(code: Int) = "key://$code"
+
+/** The key code in a [keyLink], or null for any other link. */
+fun keyCode(link: String): Int? = if (link.startsWith("key://")) link.removePrefix("key://").toIntOrNull() else null
+
+private class CatalogApp(val name: String, val pkg: String, val link: String = playStoreLink(pkg))
+
 /**
- * Apps to pick from. Package names were checked against Google Play. The
- * first four use web links the Android TV apps register; the rest launch by
- * package name. A package that is not installed opens its store page.
+ * Apps to pick from: name, Android TV package (to recognise the open app) and the link that opens it.
+ *
+ * The stick does NOT open an app from a package name: `market://launch?id=`, `android-app://` and `intent:` links are
+ * all ignored (tried on a real waipu stick). What works: a web link the TV app registers (YouTube, Prime Video, Disney+,
+ * ZDF, ARD Mediathek), the stick's DIAL service (Netflix), a key (Home is waipu.tv), and, for any other app, its Play
+ * Store page ([playStoreLink]): it opens on the stick and the user presses OK on "Open" (what the old Remote ATV app does).
  */
-val CATALOG = listOf(
-    AppShortcut("YouTube", "https://www.youtube.com"),
-    AppShortcut("Netflix", "https://www.netflix.com"),
-    AppShortcut("Prime Video", "https://app.primevideo.com"),
-    AppShortcut("Disney+", "https://www.disneyplus.com"),
-    AppShortcut("waipu.tv", marketLink("de.exaring.waipu")),
-    AppShortcut("Apple TV", marketLink("com.apple.atve.androidtv.appletv")),
-    AppShortcut("Paramount+", marketLink("com.cbs.ott")),
-    AppShortcut("HBO Max", marketLink("com.wbd.stream")),
-    AppShortcut("Twitch", marketLink("tv.twitch.android.app")),
-    AppShortcut("Crunchyroll", marketLink("com.crunchyroll.crunchyroid")),
-    AppShortcut("DAZN", marketLink("com.dazn")),
-    AppShortcut("Joyn", marketLink("de.prosiebensat1digital.seventv")),
-    AppShortcut("RTL+", marketLink("de.rtli.tvnow")),
-    AppShortcut("WOW", marketLink("de.sky.online")),
-    AppShortcut("ARD Mediathek", marketLink("de.swr.avp.ard.tv")),
-    AppShortcut("ZDF", marketLink("com.zdf.android.mediathek")),
-    AppShortcut("ARTE", marketLink("tv.arte.plus7")),
-    AppShortcut("Spotify", marketLink("com.spotify.tv.android")),
-    AppShortcut("YouTube Music", marketLink("com.google.android.youtube.tvmusic")),
-    AppShortcut("Amazon Music", marketLink("com.amazon.music.tv")),
-    AppShortcut("Pluto TV", marketLink("tv.pluto.android")),
-    AppShortcut("Tubi", marketLink("com.tubitv")),
-    AppShortcut("Plex", marketLink("com.plexapp.android")),
-    AppShortcut("Kodi", marketLink("org.xbmc.kodi")),
-    AppShortcut("VLC", marketLink("org.videolan.vlc")),
+private val CATALOG_APPS = listOf(
+    CatalogApp("YouTube", "com.google.android.youtube.tv", "https://www.youtube.com"),
+    CatalogApp("Netflix", "com.netflix.ninja", dialLink("Netflix")),
+    CatalogApp("Prime Video", "com.amazon.amazonvideo.livingroom", "https://app.primevideo.com"),
+    CatalogApp("Disney+", "com.disney.disneyplus", "https://www.disneyplus.com"),
+    CatalogApp("waipu.tv", "de.exaring.waipu", keyLink(3)),
+    CatalogApp("Apple TV", "com.apple.atve.androidtv.appletv"),
+    CatalogApp("Paramount+", "com.cbs.ott"),
+    CatalogApp("HBO Max", "com.wbd.stream"),
+    CatalogApp("Twitch", "tv.twitch.android.app"),
+    CatalogApp("Crunchyroll", "com.crunchyroll.crunchyroid"),
+    CatalogApp("DAZN", "com.dazn"),
+    CatalogApp("Joyn", "de.prosiebensat1digital.seventv"),
+    CatalogApp("RTL+", "de.rtli.tvnow"),
+    CatalogApp("WOW", "de.sky.online"),
+    CatalogApp("ARD Mediathek", "de.swr.avp.ard.tv", "https://www.ardmediathek.de"),
+    CatalogApp("ZDF", "com.zdf.android.mediathek", "https://www.zdf.de"),
+    CatalogApp("ARTE", "tv.arte.plus7"),
+    CatalogApp("Spotify", "com.spotify.tv.android"),
+    CatalogApp("YouTube Music", "com.google.android.youtube.tvmusic"),
+    CatalogApp("Amazon Music", "com.amazon.music.tv"),
+    CatalogApp("Pluto TV", "tv.pluto.android"),
+    CatalogApp("Tubi", "com.tubitv"),
+    CatalogApp("Plex", "com.plexapp.android"),
+    CatalogApp("Kodi", "org.xbmc.kodi"),
+    CatalogApp("VLC", "org.videolan.vlc"),
 )
+
+val CATALOG: List<AppShortcut> = CATALOG_APPS.map { AppShortcut(it.name, it.link) }
 
 val DEFAULT_APPS = CATALOG.take(5)
 
-/** The Android TV packages behind the catalog entries that launch by web link. */
-private val LINK_APP_PACKAGES = mapOf(
-    "com.google.android.youtube.tv" to "YouTube",
-    "com.netflix.ninja" to "Netflix",
-    "com.amazon.amazonvideo.livingroom" to "Prime Video",
-    "com.disney.disneyplus" to "Disney+",
-)
+private val PACKAGE_NAMES = CATALOG_APPS.associate { it.pkg to it.name }
 
 private val GENERIC_PACKAGE_PARTS = setOf(
     "com", "org", "net", "io", "de", "tv", "app", "android", "androidtv", "google", "ott", "mobile", "tvapp",
@@ -104,11 +123,10 @@ fun guessAppName(pkg: String): String {
     return name.replaceFirstChar { it.uppercase() }
 }
 
-/** The shortcut for an app the TV reports as open: the catalog's entry when we know it. */
+/** The shortcut for an app the TV reports as open: the catalog's entry when we know it (else a name only). */
 fun shortcutForPackage(pkg: String, label: String? = null): AppShortcut =
-    LINK_APP_PACKAGES[pkg]?.let { name -> CATALOG.first { it.name == name } }
-        ?: CATALOG.firstOrNull { it.link == marketLink(pkg) }
-        ?: AppShortcut(label ?: guessAppName(pkg), marketLink(pkg))
+    PACKAGE_NAMES[pkg]?.let { name -> CATALOG.first { it.name == name } }
+        ?: AppShortcut(label ?: guessAppName(pkg), playStoreLink(pkg))
 
 fun SharedPreferences.loadSettings() = RemoteSettings(
     haptics = getBoolean("haptics", true),
@@ -136,13 +154,26 @@ fun SharedPreferences.Editor.putSettings(s: RemoteSettings): SharedPreferences.E
     .putString("icon", s.icon.name)
     .putBoolean("tvVolume", s.tvVolume)
 
+/** Links an earlier version saved for an app and that did not work: shortcuts that carry one get the working link. */
+private val LEGACY_LINKS = mapOf(
+    "https://www.netflix.com" to dialLink("Netflix"),
+)
+
+/** An old package-launch link becomes its app's current catalog link, or the package's Play Store page; anything else stays. */
+private fun currentLink(link: String): String {
+    LEGACY_LINKS[link]?.let { return it }
+    if (!link.startsWith(OLD_LAUNCH_PREFIX)) return link
+    val pkg = link.removePrefix(OLD_LAUNCH_PREFIX)
+    return PACKAGE_NAMES[pkg]?.let { name -> CATALOG.first { it.name == name }.link } ?: playStoreLink(pkg)
+}
+
 fun parseApps(json: String?): List<AppShortcut> {
     if (json == null) return DEFAULT_APPS
     return runCatching {
         val array = JSONArray(json)
         List(array.length()) { i ->
             val o = array.getJSONObject(i)
-            AppShortcut(o.getString("name"), o.getString("link"))
+            AppShortcut(o.getString("name"), currentLink(o.getString("link")))
         }
     }.getOrDefault(DEFAULT_APPS)
 }

@@ -341,8 +341,7 @@ fun AppShortcutsScreen(vm: RemoteViewModel, onBack: () -> Unit) {
 
         // Apps already in your list are not offered again: they are above, with their Remove button.
         // Whatever is open on the TV right now is offered too, even when it is not in the catalog.
-        val pkg = state.appPackage
-        val open = pkg?.let { shortcutForPackage(it, state.appLabel) }
+        val open = state.appPackage?.takeIf { state.on != false }?.let { shortcutForPackage(it, state.appLabel) }
         if (open != null && apps.none { it.link == open.link }) {
             PickerSection("Open on your TV now")
             CatalogRow(open, subtitle = "Currently open") { vm.addApp(open) }
@@ -356,7 +355,7 @@ fun AppShortcutsScreen(vm: RemoteViewModel, onBack: () -> Unit) {
         available.forEach { app -> CatalogRow(app, subtitle = null) { vm.addApp(app) } }
 
         PickerSection("Something else")
-        TOutlinedButton(onClick = { custom = true }, modifier = Modifier.fillMaxWidth()) { Text("Add by package name or link…") }
+        TOutlinedButton(onClick = { custom = true }, modifier = Modifier.fillMaxWidth()) { Text("Add by link or package…") }
         TTextButton(onClick = vm::resetApps, modifier = Modifier.fillMaxWidth()) { Text("Reset to defaults") }
     }
 
@@ -365,10 +364,10 @@ fun AppShortcutsScreen(vm: RemoteViewModel, onBack: () -> Unit) {
         var link by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { custom = false },
-            title = { Text("Add by package name") },
+            title = { Text("Add by link or package") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("A package name like com.netflix.ninja, or a web link.", fontSize = 13.sp)
+                    Text("A web link, or a package name like com.netflix.ninja (opens its Play Store page: press OK on Open).", fontSize = 13.sp)
                     OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
                     OutlinedTextField(link, { link = it.trim() }, label = { Text("Package name or link") }, singleLine = true)
                 }

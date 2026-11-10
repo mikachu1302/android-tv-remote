@@ -48,6 +48,25 @@ class TvAudioTest {
     }
 
     @Test
+    fun dialRequestsAreAPlainPostToTheApplication() {
+        // The request is built inside startDialApp; check the shape by running it against a one-shot local server.
+        val server = java.net.ServerSocket(0)
+        val seen = java.util.concurrent.atomic.AtomicReference("")
+        val thread = Thread {
+            server.accept().use { socket ->
+                val buffer = ByteArray(2048)
+                seen.set(String(buffer, 0, socket.getInputStream().read(buffer)))
+                socket.getOutputStream().write("HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n".toByteArray())
+            }
+        }.also { it.start() }
+        startDialApp("127.0.0.1", "Netflix", server.localPort)
+        thread.join(2000)
+        server.close()
+        assertTrue(seen.get().startsWith("POST /apps/Netflix HTTP/1.1\r\n"))
+        assertTrue("Content-Length: 0" in seen.get())
+    }
+
+    @Test
     fun macAddressesParseInCommonSpellings() {
         val expected = byteArrayOf(0x02, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E)
         assertArrayEquals(expected, Wol.parseMac("02:1a:2b:3c:4d:5e"))

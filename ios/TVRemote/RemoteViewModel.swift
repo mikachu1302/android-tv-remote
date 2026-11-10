@@ -222,6 +222,15 @@ final class RemoteViewModel: ObservableObject {
 
     func launch(_ link: String) {
         if demo { demoKeys.append("launch:\(link)"); return }
+        if let code = keyCode(link) {
+            press(code)
+            return
+        }
+        if let app = dialApp(link), let tv = paired {
+            // Not an app link: the stick starts these through its DIAL service (Netflix ignores app links).
+            Task { await startDialApp(host: tv.host, app: app) }
+            return
+        }
         withConnection { try $0.launch(link) }
     }
 

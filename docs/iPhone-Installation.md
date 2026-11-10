@@ -5,7 +5,7 @@ Stand: 9. November 2026, nach der AltStore-Dokumentation (Links ganz unten).
 
 ## Worum es geht
 
-Die App liegt nicht im App Store. Du bekommst sie als Datei (`TVRemote-0.4.4-unsigned.ipa`) und installierst sie mit
+Die App liegt nicht im App Store. Du bekommst sie als Datei (`TVRemote-0.4.5-unsigned.ipa`) und installierst sie mit
 **AltStore**. Das Programm trägt deine Apple-ID in die App ein, damit das iPhone sie öffnen darf.
 
 Die Sache hat einen Haken, und der kommt von Apple, nicht von der App: Mit einer kostenlosen Apple-ID **läuft eine
@@ -53,10 +53,10 @@ beim Auffrischen erhalten.
 ## Schritt 4: die App laden und installieren
 
 1. Auf dem **iPhone** in Safari diese Seite öffnen:
-   `https://github.com/mikachu1302/android-tv-remote/releases/tag/v0.4.4`
-2. Unter „Assets" auf **`TVRemote-0.4.4-unsigned.ipa`** tippen. Safari fragt, ob geladen werden soll: „Laden".
+   `https://github.com/mikachu1302/android-tv-remote/releases/tag/v0.4.5`
+2. Unter „Assets" auf **`TVRemote-0.4.5-unsigned.ipa`** tippen. Safari fragt, ob geladen werden soll: „Laden".
    Die Datei liegt danach in der App **Dateien** im Ordner **Downloads**.
-3. **AltStore** öffnen → unten **„My Apps"** → oben links auf das **„+"** → die Datei `TVRemote-0.4.4-unsigned.ipa`
+3. **AltStore** öffnen → unten **„My Apps"** → oben links auf das **„+"** → die Datei `TVRemote-0.4.5-unsigned.ipa`
    auswählen → bei Nachfrage mit der Apple-ID anmelden.
 4. Warten. Wenn **TV Remote** in der Liste „My Apps" steht und auf dem Home-Bildschirm erscheint, ist sie installiert.
 

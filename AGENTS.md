@@ -220,10 +220,25 @@ unsigned IPA. Artifacts: `screenshots`, `test-results`, `ipa-unsigned`. Look at 
   press, `END_LONG` on release – never leave a key held: the release runs in a `finally`);
   with "smooth press" off it repeats a short press (~150 ms after ~400 ms). Other buttons
   fire once.
-- **App catalog:** every package name in `CATALOG` was checked against Google Play
-  (`play.google.com/store/apps/details?id=<package>` must answer 200 with the right title)
-  before adding it; don't add one from memory. The picker also offers the app that is open
-  on the TV (any package works through `market://launch?id=`), so a missing app is never a dead end.
+- **How shortcuts open apps on the waipu stick (tested on the real stick, from the phone app):** the stick ignores a package
+  name in the "launch" forms: `market://launch?id=<package>`, `android-app://<package>/` and a full `intent://#Intent;package=...;
+  category=android.intent.category.LEANBACK_LAUNCHER;end` sent as `remote_app_link_launch_request` all did nothing, even for Netflix,
+  which is installed. What works: (1) a **web link the TV app registers** (YouTube, Prime Video, Disney+, ZDF `https://www.zdf.de`,
+  ARD Mediathek `https://www.ardmediathek.de`); (2) the stick's **DIAL service** for Netflix (`dial://Netflix` = `POST
+  http://<stick>:8008/apps/Netflix`, no pairing; `GET` on the same URL shows the state and the run id, `DELETE .../<run id>` stops
+  it); (3) a **key press** (`key://3` = Home, which on a waipu stick is the waipu.tv app); (4) for every other app the
+  **Play Store page** of its package, `https://play.google.com/store/apps/details?id=<package>`: the stick opens the store page and
+  the user presses OK on "Open" (verified with Twitch: the status chip shows "Vending", after OK it shows "Twitch"). That last one
+  is what the old Remote ATV app does (its strings hold the `.../store/apps/details?id=` prefix, plus per-app deep links such as
+  `disneyplus://www.disneyplus.com`, `https://app.primevideo.com`, `crunchyroll://`, and a package list to recognise the open app).
+  A web link that the TV app does not handle (or an app that is not installed) does nothing. `CATALOG_APPS` in `Prefs.kt` has
+  name, package and link per app (no link = the Play Store page); the Swift core is generated from it
+  (`tools/port_data_to_swift.py`). Saved shortcuts with an old `market://launch?id=` link are upgraded when the list loads
+  (`currentLink`): to the catalog link of that app, else to the package's Play Store page.
+- **App catalog:** the package of each app was checked against Google Play (`play.google.com/store/apps/details?id=<package>`
+  must answer 200 with the right title) and is used to recognise the open app and to build its Play Store link. A direct link
+  (web, DIAL, key) goes in only after it opened the app on the real stick; watch the status chip, which shows the open app.
+  Don't add an app from memory.
 - Art in launcher icons must stay inside the part the launcher shows (the generator scales it to ~0.72;
   `LauncherResourcesTest` checks). Settings previews draw the real adaptive icon through the device's mask.
 - Icons are drawn from path data (`Icons.kt`): fonts on phones lack many symbols (⏻ and ✓ showed as

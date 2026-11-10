@@ -125,9 +125,8 @@ class AppCatalogTest {
     fun catalogHasNoDuplicatesAndOnlyUsableLinks() {
         assertEquals(CATALOG.size, CATALOG.map { it.name }.toSet().size)
         assertEquals(CATALOG.size, CATALOG.map { it.link }.toSet().size)
-        val market = Regex("market://launch\\?id=[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+")
         CATALOG.forEach { app ->
-            assertTrue("${app.name}: ${app.link}", app.link.startsWith("https://") || market.matches(app.link))
+            assertTrue("${app.name}: ${app.link}", app.link.startsWith("https://") || dialApp(app.link) != null || keyCode(app.link) != null)
         }
     }
 
@@ -139,14 +138,39 @@ class AppCatalogTest {
 
     @Test
     fun customInputIsALinkOrAPackageName() {
-        assertEquals("market://launch?id=com.example.app", customLink("  com.example.app "))
+        assertEquals("https://play.google.com/store/apps/details?id=com.example.app", customLink("  com.example.app "))
         assertEquals("https://example.org/x", customLink("https://example.org/x"))
         assertEquals("spotify://", customLink("spotify://"))
     }
 
     @Test
+    fun savedShortcutsFromEarlierVersionsGetTheLinkThatWorks() {
+        val old = """[{"name":"YouTube","link":"https://www.youtube.com"},{"name":"Netflix","link":"https://www.netflix.com"},""" +
+            """{"name":"ZDF","link":"market://launch?id=com.zdf.android.mediathek"},{"name":"waipu.tv","link":"market://launch?id=de.exaring.waipu"},""" +
+            """{"name":"Mine","link":"market://launch?id=com.example.mine"},{"name":"Web","link":"https://example.org/x"}]"""
+        val apps = parseApps(old)
+        assertEquals("https://www.youtube.com", apps[0].link)
+        assertEquals("dial://Netflix", apps[1].link)
+        assertEquals("https://www.zdf.de", apps[2].link)
+        assertEquals("key://3", apps[3].link)
+        // an old launch link of an app outside the catalog becomes that package's Play Store page
+        assertEquals("https://play.google.com/store/apps/details?id=com.example.mine", apps[4].link)
+        assertEquals("https://example.org/x", apps[5].link)
+    }
+
+    @Test
+    fun dialAndKeyLinksNameTheirTarget() {
+        assertEquals("Netflix", dialApp(dialLink("Netflix")))
+        assertEquals(null, dialApp("https://www.netflix.com"))
+        assertEquals(null, dialApp("dial://"))
+        assertEquals(3, keyCode(keyLink(3)))
+        assertEquals(null, keyCode("https://example.org"))
+        assertEquals(null, keyCode("key://home"))
+    }
+
+    @Test
     fun appListRoundTripsThroughJson() {
-        val apps = listOf(AppShortcut("A", "https://a.example"), AppShortcut("B \"q\"", "market://launch?id=b.c"))
+        val apps = listOf(AppShortcut("A", "https://a.example"), AppShortcut("B \"q\"", "https://play.google.com/store/apps/details?id=b.c"))
         assertEquals(apps, parseApps(appsToJson(apps)))
         assertEquals(DEFAULT_APPS, parseApps(null))
         assertEquals(DEFAULT_APPS, parseApps("not json"))
@@ -158,6 +182,8 @@ class AppNameTest {
     fun knownTvPackagesGiveTheCatalogEntry() {
         assertEquals(CATALOG.first { it.name == "YouTube" }, shortcutForPackage("com.google.android.youtube.tv"))
         assertEquals(CATALOG.first { it.name == "Twitch" }, shortcutForPackage("tv.twitch.android.app"))
+        assertEquals(CATALOG.first { it.name == "Netflix" }, shortcutForPackage("com.netflix.ninja"))
+        assertEquals(CATALOG.first { it.name == "waipu.tv" }, shortcutForPackage("de.exaring.waipu"))
     }
 
     @Test
@@ -166,7 +192,7 @@ class AppNameTest {
         assertEquals("Youtube", guessAppName("com.google.android.youtube.tv"))
         val s = shortcutForPackage("com.example.coolplayer.tv")
         assertEquals("Coolplayer", s.name)
-        assertEquals("market://launch?id=com.example.coolplayer.tv", s.link)
+        assertEquals("https://play.google.com/store/apps/details?id=com.example.coolplayer.tv", s.link)
         assertEquals("From TV", shortcutForPackage("com.example.coolplayer.tv", "From TV").name)
     }
 }

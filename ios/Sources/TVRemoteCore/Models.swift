@@ -1,20 +1,41 @@
 import Foundation
 
-/// A tile in the app row: opens `link` on the TV (a deep link or `market://launch?id=<package>`).
+/// A tile in the app row: opens `link` on the TV (a web link, a Play Store page, `dial://<app>`, or `key://<code>`).
 public struct AppShortcut: Equatable, Codable, Hashable {
     public var name: String
     public var link: String
     public init(name: String, link: String) { self.name = name; self.link = link }
 }
 
-/// Opens any installed app by its Android package name (or its Play Store page if it is missing).
-public func marketLink(_ pkg: String) -> String { "market://launch?id=\(pkg)" }
+/// An app the stick starts through its DIAL service (`POST http://<stick>:8008/apps/<name>`) rather than through an
+/// app link. For apps that ignore app links (Netflix).
+public func dialLink(_ app: String) -> String { "dial://\(app)" }
 
-/// What a user may type for a custom shortcut: a web/deep link as is, or an Android package name
-/// (`com.example.app`), which becomes a market link.
+/// The DIAL application name in a `dialLink`, or nil for any other link.
+public func dialApp(_ link: String) -> String? {
+    guard link.hasPrefix("dial://") else { return nil }
+    let name = String(link.dropFirst("dial://".count))
+    return name.isEmpty ? nil : name
+}
+
+/// A key press as a shortcut: `key://<Android key code>`. On a waipu stick the Home key is the waipu.tv app.
+public func keyLink(_ code: Int) -> String { "key://\(code)" }
+
+/// The key code in a `keyLink`, or nil for any other link.
+public func keyCode(_ link: String) -> Int? {
+    guard link.hasPrefix("key://") else { return nil }
+    return Int(link.dropFirst("key://".count))
+}
+
+/// The Play Store page of a package. The stick shows it; the user presses OK on "Open" (or "Install").
+public func playStoreLink(_ pkg: String) -> String { "https://play.google.com/store/apps/details?id=\(pkg)" }
+
+
+/// What a user may type for a custom shortcut: a link as is, or an Android package name (`com.example.app`), which
+/// becomes the package's Play Store page.
 public func customLink(_ input: String) -> String {
     let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
-    return text.contains("://") ? text : marketLink(text)
+    return text.contains("://") ? text : playStoreLink(text)
 }
 
 /// The apps first offered in the row.
@@ -29,16 +50,30 @@ public func guessAppName(_ pkg: String) -> String {
 
 /// The shortcut for an app the TV reports as open: the catalog's entry when we know it.
 public func shortcutForPackage(_ pkg: String, label: String? = nil) -> AppShortcut {
-    if let name = linkAppPackages[pkg], let entry = appCatalog.first(where: { $0.name == name }) { return entry }
-    if let entry = appCatalog.first(where: { $0.link == marketLink(pkg) }) { return entry }
-    return AppShortcut(name: label ?? guessAppName(pkg), link: marketLink(pkg))
+    if let name = appPackages[pkg], let entry = appCatalog.first(where: { $0.name == name }) { return entry }
+    return AppShortcut(name: label ?? guessAppName(pkg), link: playStoreLink(pkg))
+}
+
+/// Links an earlier version saved for an app and that did not work: shortcuts that carry one get the working link.
+private let legacyLinks = [
+    "https://www.netflix.com": dialLink("Netflix"),
+]
+
+/// An old package-launch link becomes its app's current catalog link, or the package's Play Store page; anything else stays.
+private func currentLink(_ link: String) -> String {
+    if let upgraded = legacyLinks[link] { return upgraded }
+    let prefix = "market://launch?id="
+    guard link.hasPrefix(prefix) else { return link }
+    let pkg = String(link.dropFirst(prefix.count))
+    if let name = appPackages[pkg], let entry = appCatalog.first(where: { $0.name == name }) { return entry.link }
+    return playStoreLink(pkg)
 }
 
 public func parseApps(_ json: String?) -> [AppShortcut] {
     guard let json, let data = json.data(using: .utf8), let apps = try? JSONDecoder().decode([AppShortcut].self, from: data) else {
         return defaultApps
     }
-    return apps
+    return apps.map { AppShortcut(name: $0.name, link: currentLink($0.link)) }
 }
 
 public func appsToJson(_ apps: [AppShortcut]) -> String {

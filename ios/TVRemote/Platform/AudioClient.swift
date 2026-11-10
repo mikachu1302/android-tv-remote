@@ -45,6 +45,17 @@ struct AudioClient {
     }
 }
 
+/// Starts `app` through the stick's DIAL service (`POST http://<host>:8008/apps/<app>`), for apps that ignore app links.
+func startDialApp(host: String, app: String, port: Int = 8008) async {
+    guard let encoded = app.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+          let url = URL(string: "http://\(host):\(port)/apps/\(encoded)") else { return }
+    var request = URLRequest(url: url, timeoutInterval: 4)
+    request.httpMethod = "POST"
+    request.setValue("text/plain; charset=\"utf-8\"", forHTTPHeaderField: "Content-Type")
+    request.httpBody = Data()
+    _ = try? await URLSession(configuration: .ephemeral).data(for: request)
+}
+
 /// Looks for TVs with a UPnP renderer on the phone's /24 network by asking each address for the Hisense VIDAA
 /// renderer description (an SSDP search would need Apple's multicast entitlement, which free accounts lack).
 /// Runs only when the user asks (the TV volume settings).

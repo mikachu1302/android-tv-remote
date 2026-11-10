@@ -35,14 +35,16 @@ final class PaletteTests: XCTestCase {
 }
 
 final class ModelTests: XCTestCase {
-    func testCatalogHasNoDuplicatesAndOnlyUsableLinks() {
+    func testCatalogHasNoDuplicatesAndOnlyLinksThatCanWork() {
         XCTAssertEqual(appCatalog.count, Set(appCatalog.map(\.name)).count)
         XCTAssertEqual(appCatalog.count, Set(appCatalog.map(\.link)).count)
         for app in appCatalog {
-            let ok = app.link.hasPrefix("https://") || app.link.range(of: "^market://launch\\?id=[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$", options: .regularExpression) != nil
+            let ok = app.link.hasPrefix("https://") || dialApp(app.link) != nil || keyCode(app.link) != nil
             XCTAssertTrue(ok, "\(app.name): \(app.link)")
         }
         XCTAssertEqual(appCatalog.count, 25)
+        // apps without a direct link open their Play Store page
+        XCTAssertEqual(appCatalog.first { $0.name == "Twitch" }?.link, "https://play.google.com/store/apps/details?id=tv.twitch.android.app")
     }
 
     func testDefaultsComeFromTheCatalog() {
@@ -50,14 +52,37 @@ final class ModelTests: XCTestCase {
         XCTAssertTrue(defaultApps.allSatisfy { appCatalog.contains($0) })
     }
 
+    func testDialLinksNameTheApplication() {
+        XCTAssertEqual(dialApp(dialLink("Netflix")), "Netflix")
+        XCTAssertNil(dialApp("https://www.netflix.com"))
+        XCTAssertNil(dialApp("dial://"))
+        XCTAssertEqual(keyCode(keyLink(3)), 3)
+        XCTAssertNil(keyCode("https://example.org"))
+        XCTAssertNil(keyCode("key://home"))
+    }
+
     func testCustomInputIsALinkOrAPackageName() {
-        XCTAssertEqual(customLink("  com.example.app "), "market://launch?id=com.example.app")
+        XCTAssertEqual(customLink("  com.example.app "), "https://play.google.com/store/apps/details?id=com.example.app")
         XCTAssertEqual(customLink("https://example.org/x"), "https://example.org/x")
         XCTAssertEqual(customLink("spotify://"), "spotify://")
     }
 
+    func testSavedShortcutsFromEarlierVersionsGetTheLinkThatWorks() {
+        let old = #"[{"name":"YouTube","link":"https://www.youtube.com"},{"name":"Netflix","link":"https://www.netflix.com"},"#
+            + #"{"name":"ZDF","link":"market://launch?id=com.zdf.android.mediathek"},{"name":"waipu.tv","link":"market://launch?id=de.exaring.waipu"},"#
+            + #"{"name":"Mine","link":"market://launch?id=com.example.mine"},{"name":"Web","link":"https://example.org/x"}]"#
+        let apps = parseApps(old)
+        XCTAssertEqual(apps[0].link, "https://www.youtube.com")
+        XCTAssertEqual(apps[1].link, "dial://Netflix")
+        XCTAssertEqual(apps[2].link, "https://www.zdf.de")
+        XCTAssertEqual(apps[3].link, "key://3")
+        // an old launch link of an app outside the catalog becomes that package's Play Store page
+        XCTAssertEqual(apps[4].link, "https://play.google.com/store/apps/details?id=com.example.mine")
+        XCTAssertEqual(apps[5].link, "https://example.org/x")
+    }
+
     func testAppListRoundTripsThroughJson() {
-        let apps = [AppShortcut(name: "A", link: "https://a.example"), AppShortcut(name: "B \"q\"", link: "market://launch?id=b.c")]
+        let apps = [AppShortcut(name: "A", link: "https://a.example"), AppShortcut(name: "B \"q\"", link: "https://play.google.com/store/apps/details?id=b.c")]
         XCTAssertEqual(parseApps(appsToJson(apps)), apps)
         XCTAssertEqual(parseApps(nil), defaultApps)
         XCTAssertEqual(parseApps("not json"), defaultApps)
@@ -66,6 +91,8 @@ final class ModelTests: XCTestCase {
     func testKnownTvPackagesGiveTheCatalogEntry() {
         XCTAssertEqual(shortcutForPackage("com.google.android.youtube.tv"), appCatalog.first { $0.name == "YouTube" })
         XCTAssertEqual(shortcutForPackage("tv.twitch.android.app"), appCatalog.first { $0.name == "Twitch" })
+        XCTAssertEqual(shortcutForPackage("com.netflix.ninja"), appCatalog.first { $0.name == "Netflix" })
+        XCTAssertEqual(shortcutForPackage("de.exaring.waipu"), appCatalog.first { $0.name == "waipu.tv" })
     }
 
     func testUnknownPackagesGetAReadableNameAndAMarketLink() {
@@ -73,7 +100,7 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(guessAppName("com.google.android.youtube.tv"), "Youtube")
         let s = shortcutForPackage("com.example.coolplayer.tv")
         XCTAssertEqual(s.name, "Coolplayer")
-        XCTAssertEqual(s.link, "market://launch?id=com.example.coolplayer.tv")
+        XCTAssertEqual(s.link, "https://play.google.com/store/apps/details?id=com.example.coolplayer.tv")
         XCTAssertEqual(shortcutForPackage("com.example.coolplayer.tv", label: "From TV").name, "From TV")
     }
 

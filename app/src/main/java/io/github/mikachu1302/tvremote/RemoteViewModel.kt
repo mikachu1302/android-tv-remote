@@ -348,7 +348,17 @@ class RemoteViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun launch(link: String) = withConnection { it.launch(link) }
+    fun launch(link: String) {
+        keyCode(link)?.let { press(it); return }
+        val dial = dialApp(link)
+        val tv = _paired.value
+        if (dial != null && tv != null) {
+            // Not an app link: the stick starts these through its DIAL service (Netflix ignores app links).
+            viewModelScope.launch(Dispatchers.IO) { runCatching { startDialApp(tv.host, dial) } }
+            return
+        }
+        withConnection { it.launch(link) }
+    }
 
     // ------------------------------------------------------------ voice
 

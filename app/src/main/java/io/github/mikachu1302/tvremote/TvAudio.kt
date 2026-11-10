@@ -144,6 +144,14 @@ class AudioClient(private val tv: AudioTv) {
     fun setMute(on: Boolean) { call("SetMute", "$master<DesiredMute>${if (on) 1 else 0}</DesiredMute>") }
 }
 
+/** Starts [app] on a device with a DIAL service (the stick, port 8008); throws when it refuses. */
+fun startDialApp(host: String, app: String, port: Int = 8008) {
+    val request = "POST /apps/${java.net.URLEncoder.encode(app, "UTF-8")} HTTP/1.1\r\nHOST: $host:$port\r\n" +
+        "Content-Type: text/plain; charset=\"utf-8\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    val answer = httpRequest(host, port, request, 4_000)
+    if (answer.status !in 200..299) throw IOException("The stick answered ${answer.status} for $app")
+}
+
 /** Wake-on-LAN: a "magic packet" the TV's network chip listens for while the TV is in standby. */
 object Wol {
     /** 6 bytes from "AA:BB:CC:DD:EE:FF" (also with dashes or spaces), or null when it is not a MAC address. */

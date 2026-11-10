@@ -36,10 +36,12 @@ struct AppShortcutsScreen: View {
                 SettingsSection(title: "Add apps")
                 let available = appCatalog.filter { entry in !apps.contains { $0.link == entry.link } }
                 if available.isEmpty { Text("All apps are in your list.").font(term.font(13)).foregroundColor(term.dim) }
-                ForEach(available, id: \.link) { app in CatalogRow(app: app, subtitle: nil) { vm.addApp(app) } }
+                ForEach(available, id: \.link) { app in
+                    CatalogRow(app: app, subtitle: nil) { vm.addApp(app) }
+                }
 
                 SettingsSection(title: "Something else")
-                TButton(kind: .outlined, action: { custom = true }) { Text("Add by package name or link…").frame(maxWidth: .infinity) }
+                TButton(kind: .outlined, action: { custom = true }) { Text("Add by link or package…").frame(maxWidth: .infinity) }
                 TButton(kind: .text, action: vm.resetApps) { Text("Reset to defaults").frame(maxWidth: .infinity) }
             }
             .padding(.horizontal, 20)
@@ -136,8 +138,8 @@ private struct CustomAppSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Add an app").font(term.font(22, bold: true)).foregroundColor(term.text)
-            Text("Type the Android package name of an app on the TV (like com.example.app) or a link it opens.")
+            Text("Add by link or package").font(term.font(22, bold: true)).foregroundColor(term.text)
+            Text("A web link, or a package name like com.netflix.ninja (opens its Play Store page: press OK on Open).")
                 .font(term.font(13)).foregroundColor(term.dim)
             field("Name", text: $name)
             field("Package name or link", text: $link)
